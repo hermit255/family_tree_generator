@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // workspace パッケージは TypeScript ソースのまま参照するためトランスパイル対象にする
+  transpilePackages: ["@kakeizu/gedcom"],
   turbopack: {
     rules: {
       "*.css": {

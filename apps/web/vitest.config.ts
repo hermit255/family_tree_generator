@@ -11,5 +11,9 @@ export default defineConfig({
     environment: "jsdom",
     include: ["src/**/*.test.{ts,tsx}"],
     passWithNoTests: true,
+    coverage: {
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: ["src/**/*.test.{ts,tsx}", "src/components/ui/**", "src/lib/utils.ts", "src/app/**"],
+    },
   },
 });
