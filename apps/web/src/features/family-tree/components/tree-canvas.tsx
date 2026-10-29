@@ -5,6 +5,7 @@ import type { KonvaEventObject } from "konva/lib/Node";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { Group, Layer, Line, Rect, Stage, Text } from "react-konva";
 import { NODE_HEIGHT, NODE_WIDTH, type LayoutNode, type TreeLayout } from "../layout";
+import { COLORS, descentShape, marriageShapes, personShapes } from "../tree-shapes";
 
 // ピンチ操作中もタッチイベントを受け取る
 Konva.hitOnDragEnabled = true;
@@ -13,19 +14,6 @@ const MIN_SCALE = 0.3;
 const MAX_SCALE = 3;
 const WHEEL_FACTOR = 1.1;
 const RECENTER_DURATION = 0.25;
-
-/** canvas は CSS 変数を参照できないため色を固定値で持つ */
-const COLORS = {
-  background: "#ffffff",
-  line: "#374151",
-  text: "#111827",
-  center: "#f59e0b",
-  sex: {
-    M: { stroke: "#3b82f6", fill: "#eff6ff" },
-    F: { stroke: "#ef4444", fill: "#fef2f2" },
-    other: { stroke: "#9ca3af", fill: "#f9fafb" },
-  },
-} as const;
 
 type Point = { x: number; y: number };
 
@@ -55,7 +43,7 @@ const zoomAt = (stage: Konva.Stage, point: Point, nextScale: number) => {
 };
 
 const PersonNode = ({ node, onSelect }: { node: LayoutNode; onSelect: (id: string) => void }) => {
-  const color = node.sex === "M" || node.sex === "F" ? COLORS.sex[node.sex] : COLORS.sex.other;
+  const shapes = personShapes(node, true);
   const select = () => onSelect(node.id);
   const setCursor = (event: KonvaEventObject<MouseEvent>, cursor: string) => {
     const container = event.target.getStage()?.container();
@@ -70,27 +58,8 @@ const PersonNode = ({ node, onSelect }: { node: LayoutNode; onSelect: (id: strin
       onMouseEnter={(e) => setCursor(e, "pointer")}
       onMouseLeave={(e) => setCursor(e, "")}
     >
-      <Rect
-        width={NODE_WIDTH}
-        height={NODE_HEIGHT}
-        cornerRadius={6}
-        fill={color.fill}
-        stroke={node.isCenter ? COLORS.center : color.stroke}
-        strokeWidth={node.isCenter ? 4 : 2}
-      />
-      <Text
-        width={NODE_WIDTH}
-        height={NODE_HEIGHT}
-        padding={8}
-        text={node.label}
-        fontSize={14}
-        fontStyle={node.isCenter ? "bold" : "normal"}
-        fill={COLORS.text}
-        align="center"
-        verticalAlign="middle"
-        wrap="none"
-        ellipsis
-      />
+      <Rect {...shapes.rect} />
+      <Text {...shapes.text} />
     </Group>
   );
 };
@@ -179,13 +148,13 @@ export default function TreeCanvas({
     >
       <Layer>
         {layout.descents.map((line, index) => (
-          <Line key={`d${index}`} points={line.points} stroke={COLORS.line} strokeWidth={1.5} />
+          <Line key={`d${index}`} {...descentShape(line)} />
         ))}
-        {/* 二重線: 太い線の上に背景色の細い線を重ねる */}
         {layout.marriages.map((line, index) => (
           <Group key={`m${index}`}>
-            <Line points={line.points} stroke={COLORS.line} strokeWidth={6} lineJoin="miter" />
-            <Line points={line.points} stroke={COLORS.background} strokeWidth={2} lineJoin="miter" />
+            {marriageShapes(line).map((config, i) => (
+              <Line key={i} {...config} />
+            ))}
           </Group>
         ))}
         {layout.nodes.map((node, index) => (

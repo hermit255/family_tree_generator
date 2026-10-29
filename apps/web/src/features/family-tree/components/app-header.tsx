@@ -22,7 +22,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { canExport, createExportBlob, downloadBlob, exportFileName, type ExportFormat, type ExportTarget } from "../export";
 import { useFamilyTreeStore } from "../store";
 
 /** .ged の選択 → 置き換えの確認 → 読み込み → 補完警告の表示 */
@@ -92,8 +101,39 @@ function useImportFlow() {
   return { choose, dialogs };
 }
 
+const EXPORT_LABELS: Record<ExportFormat, string> = {
+  ged: "GEDCOM (.ged)",
+  png: "画像 (.png)",
+  pdf: "PDF (.pdf)",
+};
+const EXPORT_FORMATS = Object.keys(EXPORT_LABELS) as ExportFormat[];
+
+/** v1 はフィルタ機能が無いため、常に現在のデータを対象とする */
+function useCurrentTarget(): ExportTarget | null {
+  const tree = useFamilyTreeStore((s) => s.tree);
+  const centerId = useFamilyTreeStore((s) => s.centerId);
+  return tree ? { tree, centerId } : null;
+}
+
+function ExportItems({ target }: { target: ExportTarget | null }) {
+  const run = async (format: ExportFormat) => {
+    if (!target) return;
+    try {
+      downloadBlob(await createExportBlob(format, target), exportFileName(format, new Date()));
+    } catch (error) {
+      toast.error(`エクスポートに失敗しました: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+  return EXPORT_FORMATS.map((format) => (
+    <DropdownMenuItem key={format} disabled={!target || !canExport(format, target)} onClick={() => run(format)}>
+      {EXPORT_LABELS[format]}
+    </DropdownMenuItem>
+  ));
+}
+
 export function AppHeader() {
   const importFlow = useImportFlow();
+  const target = useCurrentTarget();
 
   return (
     <header className="flex h-12 shrink-0 items-center justify-between border-b px-4">
@@ -102,6 +142,12 @@ export function AppHeader() {
         <Button variant="outline" size="sm" onClick={importFlow.choose}>
           インポート
         </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<Button variant="outline" size="sm" />}>エクスポート</DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-40">
+            <ExportItems target={target} />
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       <div className="md:hidden">
         <DropdownMenu>
@@ -110,6 +156,11 @@ export function AppHeader() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-40">
             <DropdownMenuItem onClick={importFlow.choose}>インポート</DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>エクスポート</DropdownMenuLabel>
+              <ExportItems target={target} />
+            </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
