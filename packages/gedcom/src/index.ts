@@ -1,2 +1,2 @@
-// GEDCOM 7.0 のパース・シリアライズ・モデル変換 (フェーズ1で実装)
-export {};
+export * from "./model";
+export * from "./syntax";
