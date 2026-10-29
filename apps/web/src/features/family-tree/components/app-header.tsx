@@ -101,6 +101,37 @@ function useImportFlow() {
   return { choose, dialogs };
 }
 
+/** 確認後に名前未設定の1人だけの状態にする */
+function useResetFlow() {
+  const reset = useFamilyTreeStore((s) => s.reset);
+  const [open, setOpen] = useState(false);
+
+  const confirm = () => {
+    reset();
+    setOpen(false);
+    toast.success("新しい家系図を作成しました");
+  };
+
+  const dialog = (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>新しい家系図を作成しますか？</AlertDialogTitle>
+          <AlertDialogDescription>
+            現在のデータは破棄され、名前未設定の人物1人だけの状態になります。
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>キャンセル</AlertDialogCancel>
+          <AlertDialogAction onClick={confirm}>作成する</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+
+  return { choose: () => setOpen(true), dialog };
+}
+
 const EXPORT_LABELS: Record<ExportFormat, string> = {
   ged: "GEDCOM (.ged)",
   png: "画像 (.png)",
@@ -132,6 +163,7 @@ function ExportItems({ target }: { target: ExportTarget | null }) {
 }
 
 export function AppHeader() {
+  const resetFlow = useResetFlow();
   const importFlow = useImportFlow();
   const target = useCurrentTarget();
 
@@ -139,6 +171,9 @@ export function AppHeader() {
     <header className="flex h-12 shrink-0 items-center justify-between border-b px-4">
       <h1 className="font-semibold">家系図</h1>
       <div className="hidden gap-2 md:flex">
+        <Button variant="outline" size="sm" onClick={resetFlow.choose}>
+          新規作成
+        </Button>
         <Button variant="outline" size="sm" onClick={importFlow.choose}>
           インポート
         </Button>
@@ -155,6 +190,7 @@ export function AppHeader() {
             <MenuIcon />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-40">
+            <DropdownMenuItem onClick={resetFlow.choose}>新規作成</DropdownMenuItem>
             <DropdownMenuItem onClick={importFlow.choose}>インポート</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
@@ -164,6 +200,7 @@ export function AppHeader() {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+      {resetFlow.dialog}
       {importFlow.dialogs}
     </header>
   );

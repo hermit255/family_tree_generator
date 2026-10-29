@@ -121,3 +121,11 @@ export const SAMPLE_GEDCOM = `0 HEAD
 1 CHIL @I14@
 0 TRLR
 `;
+
+/** 新規作成時の状態(名前・性別未設定の起点ノード1人) */
+export const BLANK_GEDCOM = `0 HEAD
+1 GEDC
+2 VERS 7.0
+0 @I1@ INDI
+0 TRLR
+`;

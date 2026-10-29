@@ -85,6 +85,20 @@ describe("importText", () => {
   });
 });
 
+describe("reset", () => {
+  it("名前未設定の起点ノード1人だけにして保存し、警告・詳細パネルをクリアする", () => {
+    store().importText(gedcom("0 @X1@ INDI", "1 FAMC @F1@", "0 @F1@ FAM"));
+    store().select("X1");
+    store().reset();
+    expect(store()).toMatchObject({ centerId: "I1", warnings: [], detailOpen: false });
+    expect(store().tree?.individuals).toEqual([
+      { id: "I1", givenName: "", surname: "", nameExtras: [], familiesAsSpouse: [], familiesAsChild: [], extras: [] },
+    ]);
+    expect(store().tree?.families).toEqual([]);
+    expect(stored()).toEqual(store().tree);
+  });
+});
+
 describe("追加・更新・削除", () => {
   beforeEach(() => {
     store().importText(COUPLE);

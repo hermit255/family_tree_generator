@@ -74,3 +74,13 @@ export async function chooseImportFile(page: Page, file: string) {
   }
   await (await chooser).setFiles(fixture(file));
 }
+
+/** ヘッダーの新規作成を押す(この後に確認ダイアログが開く) */
+export async function chooseNew(page: Page) {
+  if (isMobile(page)) {
+    await openHeaderMenu(page, "新規作成");
+    await page.getByRole("menuitem", { name: "新規作成" }).click();
+  } else {
+    await page.getByRole("button", { name: "新規作成" }).click();
+  }
+}

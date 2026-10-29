@@ -16,7 +16,7 @@ import {
   type PersonInput,
 } from "@kakeizu/gedcom";
 import { create } from "zustand";
-import { SAMPLE_GEDCOM } from "./sample";
+import { BLANK_GEDCOM, SAMPLE_GEDCOM } from "./sample";
 import { loadStoredTree, saveTree } from "./storage";
 
 export type ActionResult<T = void> = { ok: true; value: T } | { ok: false; error: string };
@@ -37,6 +37,8 @@ type FamilyTreeActions = {
   /** localStorage から復元する。保存データが無い(読込不可を含む)場合は同梱サンプルを読み込む */
   hydrate: () => void;
   importText: (text: string) => ActionResult;
+  /** 名前未設定の起点ノード1人だけの状態にする(現在のデータは破棄) */
+  reset: () => void;
   /** 人物を中心にして詳細パネルを開く */
   select: (id: string) => void;
   closeDetail: () => void;
@@ -96,6 +98,11 @@ export const useFamilyTreeStore = create<FamilyTreeState & FamilyTreeActions>()(
         const { tree, warnings } = importGedcom(text);
         set({ tree, warnings, centerId: findRootId(tree), detailOpen: false });
       }),
+
+    reset: () => {
+      const tree = importGedcom(BLANK_GEDCOM).tree;
+      set({ tree, warnings: [], centerId: findRootId(tree), detailOpen: false });
+    },
 
     select: (centerId) => set({ centerId, detailOpen: true }),
     closeDetail: () => set({ detailOpen: false }),

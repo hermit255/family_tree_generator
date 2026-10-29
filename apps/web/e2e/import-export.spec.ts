@@ -1,7 +1,36 @@
 import { expect, test } from "@playwright/test";
-import { chooseImportFile, detailPanel, exportAs, exportItem, openApp, personButton, personList } from "./helpers";
+import {
+  chooseImportFile,
+  chooseNew,
+  detailPanel,
+  exportAs,
+  exportItem,
+  openApp,
+  personButton,
+  personList,
+} from "./helpers";
 
 const FILE_NAME = /^kakeizu-\d{8}\.(ged|png|pdf)$/;
+
+test.describe("新規作成", () => {
+  test("確認後に名前未設定の1人だけになり、再読み込み後も残る", async ({ page }) => {
+    await openApp(page);
+    await chooseNew(page);
+    await page.getByRole("alertdialog").getByRole("button", { name: "作成する" }).click();
+    await expect(personList(page).getByRole("button")).toHaveText(["名前未設定"]);
+    await expect(personButton(page, "名前未設定")).toHaveAttribute("aria-current", "true");
+
+    await page.reload();
+    await expect(personList(page).getByRole("button")).toHaveText(["名前未設定"]);
+  });
+
+  test("キャンセルすると現在のデータを維持する", async ({ page }) => {
+    await openApp(page);
+    await chooseNew(page);
+    await page.getByRole("alertdialog").getByRole("button", { name: "キャンセル" }).click();
+    await expect(personButton(page, "山田 健一")).toBeVisible();
+  });
+});
 
 test.describe("インポート", () => {
   test("確認後に置き換え、片方向リンクの補完を一覧表示する", async ({ page }) => {
