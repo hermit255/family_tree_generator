@@ -1,0 +1,4 @@
+/* 開発サーバーのインジケーター(画面左下)を比較対象から外す */
+nextjs-portal {
+  display: none !important;
+}

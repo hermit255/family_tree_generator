@@ -10,6 +10,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: "list",
   use: { baseURL, trace: "on-first-retry" },
+  expect: { toHaveScreenshot: { stylePath: "./e2e/screenshot.css" } },
   projects: [
     { name: "desktop", use: { ...devices["Desktop Chrome"] } },
     { name: "mobile", use: { ...devices["Pixel 7"] } },

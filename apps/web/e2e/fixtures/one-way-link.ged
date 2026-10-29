@@ -1,0 +1,12 @@
+0 HEAD
+1 GEDC
+2 VERS 7.0
+0 @I1@ INDI
+1 NAME 一郎 /鈴木/
+1 FAMC @F1@
+0 @I2@ INDI
+1 NAME 二郎 /鈴木/
+1 FAMS @F1@
+0 @F1@ FAM
+1 HUSB @I2@
+0 TRLR

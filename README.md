@@ -16,6 +16,7 @@
 | 開発サーバー (http://localhost:3000) | `docker compose up web` |
 | lint / 型チェック / 単体テスト | `docker compose run --rm dev sh -c 'pnpm lint && pnpm typecheck && pnpm test'` |
 | E2E (Playwright) | `docker compose --profile e2e run --rm e2e` |
+| E2E の基準画像を更新 | `docker compose --profile e2e run --rm e2e ./apps/web/node_modules/.bin/playwright test -c apps/web/playwright.config.ts --update-snapshots` |
 | Cloudflare プレビュー (http://localhost:8787) | `docker compose --profile preview up preview` |
 
 ## 技術スタック

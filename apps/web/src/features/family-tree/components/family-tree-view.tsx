@@ -8,6 +8,7 @@ import { useFamilyTreeStore } from "../store";
 import { useElementSize } from "../use-element-size";
 import type { AddMode } from "./add-person-dialog";
 import { NodeMenu } from "./node-menu";
+import { PersonList } from "./person-list";
 import type { Viewport } from "./tree-canvas";
 
 // Konva はブラウザの canvas を前提とするため SSR しない
@@ -52,6 +53,7 @@ export function FamilyTreeView({ focusRatio, onAdd }: Props) {
           onViewportChange={setViewport}
         />
       )}
+      {layout && <PersonList nodes={layout.nodes} onSelect={select} />}
       {detailOpen && center && viewport && <NodeMenu node={center} viewport={viewport} onAdd={onAdd} />}
     </div>
   );
