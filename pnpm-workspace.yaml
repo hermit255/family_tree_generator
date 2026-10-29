@@ -1,0 +1,14 @@
+packages:
+  - apps/*
+  - packages/*
+
+allowBuilds:
+  esbuild: true
+  workerd: true
+  sharp: false
+  unrs-resolver: false
+
+saveExact: true
+
+# コンテナ実行時に store の位置が揺れないよう固定する
+storeDir: /workspace/node_modules/.pnpm-store

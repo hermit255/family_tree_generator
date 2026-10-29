@@ -1,0 +1,51 @@
+x-node: &node
+  build:
+    context: ./docker/node
+    args:
+      UID: ${UID:-1000}
+      GID: ${GID:-1000}
+  image: kakeizu-node:24.22.2
+  working_dir: /workspace
+  volumes:
+    - .:/workspace
+
+services:
+  # パッケージ管理・各種コマンド実行用 (docker compose run --rm dev pnpm ...)
+  dev:
+    <<: *node
+    command: bash
+
+  web:
+    <<: *node
+    command: pnpm --filter web dev --hostname 0.0.0.0
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 5s
+      timeout: 30s
+      retries: 30
+
+  # OpenNext ビルド後の wrangler プレビュー
+  preview:
+    <<: *node
+    command: pnpm --filter web preview --ip 0.0.0.0
+    ports:
+      - "8787:8787"
+    profiles: [preview]
+
+  e2e:
+    image: mcr.microsoft.com/playwright:v1.64.1-noble
+    working_dir: /workspace
+    user: ${UID:-1000}:${GID:-1000}
+    volumes:
+      - .:/workspace
+    environment:
+      HOME: /tmp
+      E2E_BASE_URL: http://web:3000
+    command: ./apps/web/node_modules/.bin/playwright test -c apps/web/playwright.config.ts
+    depends_on:
+      web:
+        condition: service_healthy
+    ipc: host
+    profiles: [e2e]
