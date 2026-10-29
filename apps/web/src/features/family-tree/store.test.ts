@@ -1,5 +1,6 @@
 import { exportGedcom, importGedcom } from "@kakeizu/gedcom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { SAMPLE_GEDCOM } from "./sample";
 import { STORAGE_KEY } from "./storage";
 import { initialState, useFamilyTreeStore } from "./store";
 
@@ -40,27 +41,34 @@ describe("hydrate", () => {
   it.each([
     ["保存データが無い", null],
     ["保存データが壊れている", "broken"],
-  ])("%s場合は tree が null", (_, value) => {
+  ])("%s場合は同梱サンプルを読み込み、保存する", (_, value) => {
     if (value !== null) localStorage.setItem(STORAGE_KEY, value);
     store().hydrate();
-    expect(store()).toMatchObject({ hydrated: true, tree: null, centerId: undefined });
+    const sample = importGedcom(SAMPLE_GEDCOM).tree;
+    expect(store()).toMatchObject({ hydrated: true, tree: sample, centerId: "I1" });
+    expect(stored()).toEqual(sample);
   });
 
-  it("localStorage が使えない場合も tree が null", () => {
+  it("localStorage が使えない場合も同梱サンプルを読み込む", () => {
     const spy = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
       throw new Error("SecurityError");
     });
     store().hydrate();
-    expect(store().tree).toBeNull();
+    expect(store().tree).toEqual(importGedcom(SAMPLE_GEDCOM).tree);
     spy.mockRestore();
+  });
+
+  it("同梱サンプルは警告なしで読み込める", () => {
+    expect(importGedcom(SAMPLE_GEDCOM).warnings).toEqual([]);
   });
 });
 
 describe("importText", () => {
-  it("取り込んだデータを反映・保存し、警告を保持する", () => {
+  it("取り込んだデータを反映・保存し、警告を保持し、詳細パネルを閉じる", () => {
+    useFamilyTreeStore.setState({ detailOpen: true });
     const result = store().importText(gedcom("0 @I1@ INDI", "1 FAMC @F1@", "0 @F1@ FAM"));
     expect(result).toEqual({ ok: true, value: undefined });
-    expect(store()).toMatchObject({ centerId: "I1", warnings: ["F1 に子 I1 を補完しました"] });
+    expect(store()).toMatchObject({ centerId: "I1", warnings: ["F1 に子 I1 を補完しました"], detailOpen: false });
     expect(stored()).toEqual(store().tree);
   });
 
@@ -101,18 +109,25 @@ describe("追加・更新・削除", () => {
     expect(store().remove("I1")).toEqual({ ok: false, error: "起点ノードは削除できません" });
   });
 
-  it("中心以外の人物を削除しても中心は変わらない", () => {
+  it("select で中心にして詳細パネルを開き、closeDetail で閉じる", () => {
+    store().select("I2");
+    expect(store()).toMatchObject({ centerId: "I2", detailOpen: true });
+    store().closeDetail();
+    expect(store()).toMatchObject({ centerId: "I2", detailOpen: false });
+  });
+
+  it("中心以外の人物を削除しても中心・詳細パネルは変わらない", () => {
     store().addChild("I1", "F1", { givenName: "一郎" });
-    store().setCenter("I2");
+    store().select("I2");
     expect(store().remove("I3").ok).toBe(true);
-    expect(store().centerId).toBe("I2");
+    expect(store()).toMatchObject({ centerId: "I2", detailOpen: true });
     expect(stored()?.individuals.map((i) => i.id)).toEqual(["I1", "I2"]);
   });
 
-  it("中心の人物を削除すると起点ノードに戻る", () => {
-    store().setCenter("I2");
+  it("中心の人物を削除すると起点ノードに戻り、詳細パネルを閉じる", () => {
+    store().select("I2");
     store().remove("I2");
-    expect(store().centerId).toBe("I1");
+    expect(store()).toMatchObject({ centerId: "I1", detailOpen: false });
   });
 
   it("想定外のエラーは再送出する", () => {
@@ -123,7 +138,7 @@ describe("追加・更新・削除", () => {
 
 describe("データが空の状態", () => {
   it("addFirst で最初の人物 I1 を追加し、中心にする", () => {
-    store().hydrate();
+    store().importText(gedcom());
     expect(store().addFirst({ surname: "山田" })).toEqual({ ok: true, value: "I1" });
     expect(store().centerId).toBe("I1");
     expect(stored()?.individuals.map((i) => i.id)).toEqual(["I1"]);

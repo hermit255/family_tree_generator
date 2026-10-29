@@ -1,0 +1,123 @@
+/** 初回起動時に読み込む同梱サンプル(架空の家系) */
+export const SAMPLE_GEDCOM = `0 HEAD
+1 GEDC
+2 VERS 7.0
+1 SUBM @U1@
+0 @U1@ SUBM
+1 NAME 家系図サンプル
+0 @I1@ INDI
+1 NAME 健一 /山田/
+2 GIVN 健一
+2 SURN 山田
+1 SEX M
+1 FAMC @F1@
+1 FAMS @F3@
+1 FAMS @F4@
+0 @I2@ INDI
+1 NAME 茂 /山田/
+2 GIVN 茂
+2 SURN 山田
+1 SEX M
+1 FAMC @F2@
+1 FAMS @F1@
+0 @I3@ INDI
+1 NAME 和子 /山田/
+2 GIVN 和子
+2 SURN 山田
+1 SEX F
+1 FAMC @F5@
+1 FAMS @F1@
+0 @I4@ INDI
+1 NAME 正一 /山田/
+2 GIVN 正一
+2 SURN 山田
+1 SEX M
+1 FAMS @F2@
+0 @I5@ INDI
+1 NAME トメ /山田/
+2 GIVN トメ
+2 SURN 山田
+1 SEX F
+1 FAMS @F2@
+0 @I6@ INDI
+1 NAME 清 /佐藤/
+2 GIVN 清
+2 SURN 佐藤
+1 SEX M
+1 FAMS @F5@
+0 @I7@ INDI
+1 NAME ハル /佐藤/
+2 GIVN ハル
+2 SURN 佐藤
+1 SEX F
+1 FAMS @F5@
+0 @I8@ INDI
+1 NAME 恵子 /山田/
+2 GIVN 恵子
+2 SURN 山田
+1 SEX F
+1 FAMC @F1@
+0 @I9@ INDI
+1 NAME 美穂 /山田/
+2 GIVN 美穂
+2 SURN 山田
+1 SEX F
+1 FAMS @F3@
+0 @I10@ INDI
+1 NAME 直子 /山田/
+2 GIVN 直子
+2 SURN 山田
+1 SEX F
+1 FAMS @F4@
+0 @I11@ INDI
+1 NAME 翔太 /山田/
+2 GIVN 翔太
+2 SURN 山田
+1 SEX M
+1 FAMC @F3@
+1 FAMS @F6@
+0 @I12@ INDI
+1 NAME 結衣 /山田/
+2 GIVN 結衣
+2 SURN 山田
+1 SEX F
+1 FAMC @F4@
+0 @I13@ INDI
+1 NAME 彩 /山田/
+2 GIVN 彩
+2 SURN 山田
+1 SEX F
+1 FAMS @F6@
+0 @I14@ INDI
+1 NAME 陽向 /山田/
+2 GIVN 陽向
+2 SURN 山田
+1 SEX X
+1 FAMC @F6@
+0 @F1@ FAM
+1 HUSB @I2@
+1 WIFE @I3@
+1 CHIL @I8@
+1 CHIL @I1@
+0 @F2@ FAM
+1 HUSB @I4@
+1 WIFE @I5@
+1 CHIL @I2@
+0 @F3@ FAM
+1 HUSB @I1@
+1 WIFE @I9@
+1 CHIL @I11@
+0 @F4@ FAM
+1 HUSB @I1@
+1 WIFE @I10@
+1 CHIL @I12@
+0 @F5@ FAM
+1 HUSB @I6@
+1 WIFE @I7@
+1 CHIL @I3@
+0 @F6@ FAM
+1 HUSB @I11@
+1 WIFE @I13@
+1 CHIL @I14@
+0 TRLR
+`;

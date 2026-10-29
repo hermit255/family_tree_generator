@@ -16,6 +16,7 @@ import {
   type PersonInput,
 } from "@kakeizu/gedcom";
 import { create } from "zustand";
+import { SAMPLE_GEDCOM } from "./sample";
 import { loadStoredTree, saveTree } from "./storage";
 
 export type ActionResult<T = void> = { ok: true; value: T } | { ok: false; error: string };
@@ -28,13 +29,17 @@ type FamilyTreeState = {
   centerId: string | undefined;
   /** 直近のインポートで発生した警告 */
   warnings: string[];
+  /** 詳細パネル(とノード横メニュー)を表示しているか */
+  detailOpen: boolean;
 };
 
 type FamilyTreeActions = {
-  /** localStorage から復元する。保存データが無い場合は tree が null のまま */
+  /** localStorage から復元する。保存データが無い(読込不可を含む)場合は同梱サンプルを読み込む */
   hydrate: () => void;
   importText: (text: string) => ActionResult;
-  setCenter: (id: string) => void;
+  /** 人物を中心にして詳細パネルを開く */
+  select: (id: string) => void;
+  closeDetail: () => void;
   addFirst: (input: PersonInput) => ActionResult<string>;
   addSpouse: (personId: string, input: PersonInput) => ActionResult<string>;
   addChild: (parentId: string, familyId: string | undefined, input: PersonInput) => ActionResult<string>;
@@ -61,7 +66,13 @@ const attempt = <T>(run: () => T): ActionResult<T> => {
   }
 };
 
-export const initialState: FamilyTreeState = { hydrated: false, tree: null, centerId: undefined, warnings: [] };
+export const initialState: FamilyTreeState = {
+  hydrated: false,
+  tree: null,
+  centerId: undefined,
+  warnings: [],
+  detailOpen: false,
+};
 
 export const useFamilyTreeStore = create<FamilyTreeState & FamilyTreeActions>()((set, get) => {
   /** 追加系の操作を実行し、結果の tree を反映する */
@@ -76,17 +87,18 @@ export const useFamilyTreeStore = create<FamilyTreeState & FamilyTreeActions>()(
     ...initialState,
 
     hydrate: () => {
-      const tree = loadStoredTree();
-      set({ hydrated: true, tree, centerId: tree ? findRootId(tree) : undefined });
+      const tree = loadStoredTree() ?? importGedcom(SAMPLE_GEDCOM).tree;
+      set({ hydrated: true, tree, centerId: findRootId(tree) });
     },
 
     importText: (text) =>
       attempt(() => {
         const { tree, warnings } = importGedcom(text);
-        set({ tree, warnings, centerId: findRootId(tree) });
+        set({ tree, warnings, centerId: findRootId(tree), detailOpen: false });
       }),
 
-    setCenter: (centerId) => set({ centerId }),
+    select: (centerId) => set({ centerId, detailOpen: true }),
+    closeDetail: () => set({ detailOpen: false }),
 
     addFirst: (input) => {
       const result = applyAdd((tree) => addFirstIndividual(tree, input));
@@ -106,8 +118,12 @@ export const useFamilyTreeStore = create<FamilyTreeState & FamilyTreeActions>()(
       attempt(() => {
         const tree = deleteIndividual(get().tree ?? EMPTY_TREE, id);
         const { centerId } = get();
-        // 中心の人物を削除した場合は起点ノードに戻す
-        set({ tree, centerId: centerId === id ? findRootId(tree) : centerId });
+        // 中心の人物を削除した場合は起点ノードに戻し、詳細パネルを閉じる
+        if (centerId === id) {
+          set({ tree, centerId: findRootId(tree), detailOpen: false });
+        } else {
+          set({ tree });
+        }
       }),
   };
 });

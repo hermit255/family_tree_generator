@@ -2,7 +2,7 @@
 
 import Konva from "konva";
 import type { KonvaEventObject } from "konva/lib/Node";
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { Group, Layer, Line, Rect, Stage, Text } from "react-konva";
 import { NODE_HEIGHT, NODE_WIDTH, type LayoutNode, type TreeLayout } from "../layout";
 
@@ -29,12 +29,18 @@ const COLORS = {
 
 type Point = { x: number; y: number };
 
+/** ステージの平行移動量と拡大率(ノード座標 → 画面座標の変換) */
+export type Viewport = { x: number; y: number; scale: number };
+
 type Props = {
   layout: TreeLayout;
   centerId: string;
   width: number;
   height: number;
+  /** 中心ノードを寄せる領域の高さ(下部シートで隠れる分を除く)。省略時は height */
+  focusHeight?: number;
   onSelect: (id: string) => void;
+  onViewportChange?: (viewport: Viewport) => void;
 };
 
 const clamp = (value: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, value));
@@ -89,11 +95,28 @@ const PersonNode = ({ node, onSelect }: { node: LayoutNode; onSelect: (id: strin
   );
 };
 
-export default function TreeCanvas({ layout, centerId, width, height, onSelect }: Props) {
+export default function TreeCanvas({
+  layout,
+  centerId,
+  width,
+  height,
+  focusHeight = height,
+  onSelect,
+  onViewportChange,
+}: Props) {
   const stageRef = useRef<Konva.Stage>(null);
   const pinch = useRef<{ distance: number; center: Point } | null>(null);
+  const notifyRef = useRef(onViewportChange);
+  useLayoutEffect(() => {
+    notifyRef.current = onViewportChange;
+  }, [onViewportChange]);
 
-  // 中心ノードを画面中央へ移動する
+  const notify = () => {
+    const stage = stageRef.current;
+    if (stage) notifyRef.current?.({ x: stage.x(), y: stage.y(), scale: stage.scaleX() });
+  };
+
+  // 中心ノードを表示領域の中央へ移動する
   useEffect(() => {
     const stage = stageRef.current;
     const center = layout.nodes.find((n) => n.isCenter);
@@ -101,10 +124,12 @@ export default function TreeCanvas({ layout, centerId, width, height, onSelect }
     const scale = stage.scaleX();
     stage.to({
       x: width / 2 - (center.x + NODE_WIDTH / 2) * scale,
-      y: height / 2 - (center.y + NODE_HEIGHT / 2) * scale,
+      y: focusHeight / 2 - (center.y + NODE_HEIGHT / 2) * scale,
       duration: RECENTER_DURATION,
+      onUpdate: notify,
+      onFinish: notify,
     });
-  }, [layout, centerId, width, height]);
+  }, [layout, centerId, width, focusHeight]);
 
   const handleWheel = (event: KonvaEventObject<WheelEvent>) => {
     event.evt.preventDefault();
@@ -113,6 +138,7 @@ export default function TreeCanvas({ layout, centerId, width, height, onSelect }
     if (!stage || !pointer) return;
     const factor = event.evt.deltaY < 0 ? WHEEL_FACTOR : 1 / WHEEL_FACTOR;
     zoomAt(stage, pointer, stage.scaleX() * factor);
+    notify();
   };
 
   const handleTouchMove = (event: KonvaEventObject<TouchEvent>) => {
@@ -133,6 +159,7 @@ export default function TreeCanvas({ layout, centerId, width, height, onSelect }
 
     zoomAt(stage, center, stage.scaleX() * (distance / previous.distance));
     stage.position({ x: stage.x() + center.x - previous.center.x, y: stage.y() + center.y - previous.center.y });
+    notify();
   };
 
   return (
@@ -143,6 +170,7 @@ export default function TreeCanvas({ layout, centerId, width, height, onSelect }
       draggable
       dragDistance={4}
       onWheel={handleWheel}
+      onDragMove={notify}
       onTouchMove={handleTouchMove}
       onTouchEnd={() => {
         pinch.current = null;

@@ -1,9 +1,5 @@
-import { FamilyTreeView } from "@/features/family-tree/components/family-tree-view";
+import { FamilyTreeApp } from "@/features/family-tree/components/family-tree-app";
 
 export default function Home() {
-  return (
-    <main className="h-dvh w-full">
-      <FamilyTreeView />
-    </main>
-  );
+  return <FamilyTreeApp />;
 }
