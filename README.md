@@ -29,7 +29,7 @@
 
 ## デプロイ構成
 - backend: cloudflare worker
-- frontend: cloudflare (OpenNext)
+- frontend: Cloudflare Pages (Next.js の静的エクスポート `output: "export"` による SSG)
 - db: Cloudflare D1
 
 ## 機能分担

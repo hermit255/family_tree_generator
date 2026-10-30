@@ -12,11 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
-    // OpenNext / wrangler の生成物
-    ".open-next/**",
+    // wrangler の生成物
     ".wrangler/**",
     "coverage/**",
-    "cloudflare-env.d.ts",
   ]),
 ]);
 

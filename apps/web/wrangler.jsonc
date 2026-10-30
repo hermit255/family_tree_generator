@@ -1,11 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "main": ".open-next/worker.js",
   "name": "kakeizu-web",
   "compatibility_date": "2026-10-29",
-  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
-  "assets": {
-    "directory": ".open-next/assets",
-    "binding": "ASSETS"
-  }
+  // next build (output: "export") の静的出力を Cloudflare Pages で配信する
+  "pages_build_output_dir": "out"
 }

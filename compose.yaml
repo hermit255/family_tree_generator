@@ -26,10 +26,10 @@ services:
       timeout: 30s
       retries: 30
 
-  # OpenNext ビルド後の wrangler プレビュー
+  # 静的出力 (out/) を wrangler pages dev でプレビュー
   preview:
     <<: *node
-    command: pnpm --filter web preview --ip 0.0.0.0
+    command: pnpm --filter web preview --ip 0.0.0.0 --port 8787
     ports:
       - "8787:8787"
     profiles: [preview]
