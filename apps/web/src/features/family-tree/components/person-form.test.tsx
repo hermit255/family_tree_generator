@@ -36,9 +36,16 @@ describe("PersonForm", () => {
     expect(onCancel).toHaveBeenCalled();
   });
 
-  it("hideSex で性別欄を表示しない", () => {
-    render(<PersonForm hideSex submitLabel="追加" onSubmit={vi.fn()} />);
-    expect(screen.queryByText("性別")).toBeNull();
+  it("onCancel が無ければキャンセルを表示しない", () => {
+    render(<PersonForm submitLabel="追加" onSubmit={vi.fn()} />);
     expect(screen.queryByRole("button", { name: "キャンセル" })).toBeNull();
+  });
+
+  it("性別の初期値が変わると、入力中の姓名を保ったまま性別を追従させる", () => {
+    const { rerender } = render(<PersonForm defaultValues={{ sex: "M" }} submitLabel="追加" onSubmit={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("姓"), { target: { value: "山田" } });
+    rerender(<PersonForm defaultValues={{ sex: "F" }} submitLabel="追加" onSubmit={vi.fn()} />);
+    expect(screen.getByRole("radio", { name: "女性" })).toBeChecked();
+    expect(screen.getByLabelText("姓")).toHaveValue("山田");
   });
 });

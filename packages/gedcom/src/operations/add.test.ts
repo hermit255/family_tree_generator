@@ -118,7 +118,7 @@ describe("availableParentRoles / addParent", () => {
   it("親の家族が無ければ父母どちらも追加でき、新しい家族を作る", () => {
     const base = treeOf("0 @I1@ INDI");
     expect(availableParentRoles(base, "I1")).toEqual(["father", "mother"]);
-    const { tree, individualId } = addParent(base, "I1", "mother", { ...taro, sex: "M" });
+    const { tree, individualId } = addParent(base, "I1", "mother", taro);
     expect(individualId).toBe("I2");
     expect(shapeOf(tree)).toEqual({ F1: "-/I2/I1" });
     expect(getIndividual(tree, "I2")).toMatchObject({ sex: "F", familiesAsSpouse: [{ id: "F1" }] });
@@ -133,6 +133,12 @@ describe("availableParentRoles / addParent", () => {
     expect(shapeOf(tree)).toEqual({ F1: "I3/I2/I1" });
     expect(getIndividual(tree, "I3").sex).toBe("M");
     expectConsistent(tree);
+  });
+
+  it("性別を指定すれば既定値(父 M・母 F)より優先し、枠は続柄で決まる", () => {
+    const { tree } = addParent(treeOf("0 @I1@ INDI"), "I1", "mother", { ...taro, sex: "X" });
+    expect(shapeOf(tree)).toEqual({ F1: "-/I2/I1" });
+    expect(getIndividual(tree, "I2").sex).toBe("X");
   });
 
   it("父母が揃っていれば追加できない", () => {

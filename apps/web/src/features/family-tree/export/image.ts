@@ -12,7 +12,7 @@ const PIXEL_RATIO = 2;
 export type TreeImage = { canvas: HTMLCanvasElement; width: number; height: number };
 
 /**
- * 中心人物から上下2世代の家系図全体を、画面のパン・ズームと無関係に描いた canvas を返す。
+ * 家系図全体を、画面のパン・ズームと無関係に描いた canvas を返す。
  * 画像では中心人物を強調しない
  */
 export const renderTreeImage = (target: ExportTarget & { centerId: string }): TreeImage => {

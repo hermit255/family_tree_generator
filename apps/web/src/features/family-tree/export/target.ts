@@ -6,7 +6,7 @@ import type { FamilyTree } from "@kakeizu/gedcom";
  */
 export type ExportTarget = {
   tree: FamilyTree;
-  /** 画像出力で中心とする人物。INDI が0件の場合は undefined */
+  /** 選択中の人物(画像出力では強調しない)。INDI が0件の場合は undefined */
   centerId: string | undefined;
 };
 

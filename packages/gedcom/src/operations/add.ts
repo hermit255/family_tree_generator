@@ -100,9 +100,12 @@ export const availableParentRoles = (tree: FamilyTree, childId: string): ParentR
   return (["father", "mother"] as const).filter((role) => family[PARENT_SLOT[role]] === undefined);
 };
 
-/** 親を追加する。父は SEX M・HUSB、母は SEX F・WIFE */
+/** 親の追加で性別を指定しない場合の既定値 */
+export const PARENT_DEFAULT_SEX: Record<ParentRole, "M" | "F"> = { father: "M", mother: "F" };
+
+/** 親を追加する。父は HUSB、母は WIFE。性別の指定が無ければ父は SEX M、母は SEX F */
 export const addParent = (tree: FamilyTree, childId: string, role: ParentRole, input: PersonInput): AddResult => {
-  const valid = { ...parsePersonInput(input), sex: role === "father" ? ("M" as const) : ("F" as const) };
+  const valid = parsePersonInput({ ...input, sex: input.sex ?? PARENT_DEFAULT_SEX[role] });
   const child = getIndividual(tree, childId);
   const slot = PARENT_SLOT[role];
   const parentId = nextId(tree, "I");

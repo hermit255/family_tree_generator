@@ -1,6 +1,6 @@
 import { importGedcom } from "@kakeizu/gedcom";
 import { describe, expect, it } from "vitest";
-import { computeLayout, displayName, GAP_X, NODE_HEIGHT, NODE_WIDTH, STACK_GAP, type TreeLayout } from "./layout";
+import { computeLayout, displayName, GAP_X, NODE_HEIGHT, NODE_WIDTH, type TreeLayout } from "./layout";
 
 const treeOf = (...body: string[]) =>
   importGedcom(["0 HEAD", "1 GEDC", "2 VERS 7.0", ...body, "0 TRLR"].join("\n")).tree;
@@ -50,9 +50,25 @@ const expectDescentTo = (layout: TreeLayout, id: string) => {
   ).toBe(true);
 };
 
+/** 子の上端に届く親子線の、親側の起点(子への縦線 → バス → 親からの縦線をたどる) */
+const descentOriginTo = (layout: TreeLayout, id: string) => {
+  const node = nodeOf(layout, id);
+  const x = node.x + NODE_WIDTH / 2;
+  const isVertical = (p: number[]) => p[0] === p[2];
+  const drop = layout.descents.find(({ points: p }) => isVertical(p) && p[0] === x && p[3] === node.y);
+  const busY = drop?.points[1];
+  const bus = layout.descents.find(({ points: p }) => p[1] === busY && p[3] === busY && p[0]! <= x && x <= p[2]!);
+  const rise = layout.descents.find(
+    ({ points: p }) => isVertical(p) && p[3] === busY && p[1]! < busY! && bus!.points[0]! <= p[0]! && p[0]! <= bus!.points[2]!,
+  );
+  return rise && { x: rise.points[0]!, y: rise.points[1]! };
+};
+
+const ids = (layout: TreeLayout) => layout.nodes.map((n) => n.id).sort();
+
 // 父方祖父母 PGF/PGM、母方祖父母 MGF/MGM、父 F・母 M、兄 B・中心 C・妹 S
-// C は先妻 W1(子 K1)、後妻 W2(子 K2)と再婚。K1 は妻 KW を持ち孫 G1
-// 範囲外: 叔父 U、いとこ Q、W1 の親 WP、S の夫 SH、G1 の妻 GW、曾孫 GG
+// C は先妻 W1(子 K1)、後妻 W2(子 K2)と再婚。K1 は妻 KW を持ち孫 G1、G1 は妻 GW と曾孫 GG
+// 叔父 U・いとこ Q、W1 の父 WP、S の夫 SH
 const BIG = treeOf(
   ...indi("PGF", "M", "FAMS:FP"),
   ...indi("PGM", "F", "FAMS:FP"),
@@ -88,64 +104,45 @@ const BIG = treeOf(
 );
 
 describe("computeLayout", () => {
-  describe("表示範囲(直系+兄弟+配偶者、上下2世代)", () => {
+  describe("家系図全体", () => {
     const layout = computeLayout(BIG, "C");
 
-    it("範囲内の人物のみを世代付きで配置する", () => {
-      expect(Object.fromEntries(layout.nodes.map((n) => [n.id, n.generation]))).toEqual({
-        PGF: -2,
-        PGM: -2,
-        MGF: -2,
-        MGM: -2,
-        F: -1,
-        M: -1,
-        B: 0,
-        C: 0,
-        S: 0,
-        W1: 0,
-        W2: 0,
-        K1: 1,
-        KW: 1,
-        K2: 1,
-        G1: 2,
-      });
+    it("全員を1回ずつ配置する", () => {
+      expect(ids(layout)).toEqual(BIG.individuals.map((i) => i.id).sort());
     });
 
-    it("中心ノードのみ isCenter", () => {
+    it("中心ノードのみ isCenter で、配置は中心に依存しない", () => {
       expect(layout.nodes.filter((n) => n.isCenter).map((n) => n.id)).toEqual(["C"]);
+      const other = computeLayout(BIG, "GG");
+      const position = ({ id, x, y }: TreeLayout["nodes"][number]) => ({ id, x, y });
+      expect(other.nodes.map(position)).toEqual(layout.nodes.map(position));
+      expect(other.marriages).toEqual(layout.marriages);
+      expect(other.descents).toEqual(layout.descents);
     });
 
     it("同じ行のノードは重ならない", () => {
       expectNoOverlap(layout);
     });
 
-    it("世代ごとに行が揃い、世代が下るほど下に配置される", () => {
-      const rowY = (generation: number) => [
-        ...new Set(layout.nodes.filter((n) => n.generation === generation && !["W2"].includes(n.id)).map((n) => n.y)),
-      ];
-      const rows = [-2, -1, 0, 1, 2].map(rowY);
-      expect(rows.every((ys) => ys.length === 1)).toBe(true);
-      const tops = rows.map((ys) => ys[0]!);
-      expect([...tops].sort((a, b) => a - b)).toEqual(tops);
-    });
-
-    it("夫婦は夫が右・妻が左", () => {
-      for (const [husband, wife] of [
-        ["PGF", "PGM"],
-        ["MGF", "MGM"],
-        ["F", "M"],
-        ["C", "W1"],
-        ["K1", "KW"],
-      ]) {
-        expect(nodeOf(layout, husband!).x).toBeGreaterThan(nodeOf(layout, wife!).x);
+    it("世代ごとに行が揃い、子は親の1つ下の行に置く", () => {
+      for (const node of layout.nodes) {
+        expect(node.y).toBe(nodeOf(layout, "C").y + (node.generation - nodeOf(layout, "C").generation) * (NODE_HEIGHT + 72));
+      }
+      for (const family of BIG.families) {
+        for (const child of family.children) {
+          for (const parent of [family.husband, family.wife].flatMap((l) => l ?? [])) {
+            expect(nodeOf(layout, child.id).generation).toBe(nodeOf(layout, parent.id).generation + 1);
+          }
+        }
       }
     });
 
-    it("祖父母は父方が父の上、母方が母の上に寄り、互いに重ならない", () => {
-      const maternalRight = nodeOf(layout, "MGF").x + NODE_WIDTH;
-      expect(maternalRight + GAP_X).toBeLessThanOrEqual(nodeOf(layout, "PGM").x);
-      expect(nodeOf(layout, "MGM").x).toBeLessThan(nodeOf(layout, "M").x + NODE_WIDTH);
-      expect(nodeOf(layout, "PGF").x + NODE_WIDTH).toBeGreaterThan(nodeOf(layout, "F").x);
+    it("夫婦は夫が右・妻が左", () => {
+      for (const family of BIG.families) {
+        if (family.husband && family.wife) {
+          expect(nodeOf(layout, family.husband.id).x).toBeGreaterThan(nodeOf(layout, family.wife.id).x);
+        }
+      }
     });
 
     it("兄弟姉妹は親の家族の子の並び順に横に並ぶ", () => {
@@ -153,30 +150,45 @@ describe("computeLayout", () => {
       expect([...xs].sort((a, b) => a - b)).toEqual(xs);
     });
 
-    it("再婚の配偶者は本人の横に上下に連ね、子の行は揃える", () => {
+    it("再婚の配偶者は本人の横に婚姻順に並べ、子は各婚姻の下に並べる", () => {
+      const [c, w1, w2] = ["C", "W1", "W2"].map((id) => nodeOf(layout, id)) as [typeof layout.nodes[0], typeof layout.nodes[0], typeof layout.nodes[0]];
+      expect([w2.y, w1.y]).toEqual([c.y, c.y]);
+      expect(w1.x).toBe(c.x - NODE_WIDTH - 40);
+      expect(w2.x).toBe(w1.x - NODE_WIDTH - 40);
+      expect(nodeOf(layout, "K2").x).toBeLessThan(nodeOf(layout, "K1").x);
+      expect(nodeOf(layout, "K1").y).toBe(nodeOf(layout, "K2").y);
+    });
+
+    it("1人目の婚姻線は隣同士を結び、2人目以降は間の配偶者を上からまたぐ", () => {
       const c = nodeOf(layout, "C");
       const w1 = nodeOf(layout, "W1");
       const w2 = nodeOf(layout, "W2");
-      expect(w1.x).toBe(w2.x);
-      expect(w1.x).toBeLessThan(c.x);
-      expect([w1.y, w2.y]).toEqual([c.y, c.y + NODE_HEIGHT + STACK_GAP]);
-      expect(nodeOf(layout, "K1").y).toBe(nodeOf(layout, "K2").y);
-      expect(nodeOf(layout, "K1").y).toBeGreaterThan(w2.y + NODE_HEIGHT);
+      const lineY = c.y + NODE_HEIGHT / 2;
+      expect(layout.marriages).toContainEqual({ points: [w1.x + NODE_WIDTH, lineY, c.x, lineY] });
+      const startX = c.x + 16;
+      const riseY = c.y - 14;
+      expect(layout.marriages).toContainEqual({ points: [startX, c.y, startX, riseY, w2.x + NODE_WIDTH / 2, riseY, w2.x + NODE_WIDTH / 2, c.y] });
+      expect(layout.marriages).toHaveLength(BIG.families.filter((f) => f.husband && f.wife).length);
     });
 
-    it("婚姻線は本人と各配偶者を結ぶ", () => {
+    it("子への線は各婚姻線から引く", () => {
       const c = nodeOf(layout, "C");
+      const w1 = nodeOf(layout, "W1");
       const w2 = nodeOf(layout, "W2");
-      expect(layout.marriages).toContainEqual({
-        points: [c.x, c.y + NODE_HEIGHT / 2, c.x - 8, c.y + NODE_HEIGHT / 2, c.x - 8, w2.y + NODE_HEIGHT / 2, w2.x + NODE_WIDTH, w2.y + NODE_HEIGHT / 2],
-      });
-      expect(layout.marriages).toHaveLength(6);
+      expect(descentOriginTo(layout, "K1")).toEqual({ x: (w1.x + NODE_WIDTH + c.x) / 2, y: c.y + NODE_HEIGHT / 2 });
+      expect(descentOriginTo(layout, "K2")).toEqual({ x: (w2.x + NODE_WIDTH + w1.x) / 2, y: c.y - 14 });
     });
 
-    it("親子線が各世代の子に届く", () => {
-      for (const id of ["F", "M", "B", "C", "S", "K1", "K2", "G1"]) {
-        expectDescentTo(layout, id);
+    it("親子線が全ての子に届く", () => {
+      for (const family of BIG.families) {
+        for (const child of family.children) expectDescentTo(layout, child.id);
       }
+    });
+
+    it("配偶者の親は別に配置し、配偶者へ線を引く", () => {
+      const wp = nodeOf(layout, "WP");
+      expect(wp.generation).toBe(nodeOf(layout, "W1").generation - 1);
+      expect(descentOriginTo(layout, "W1")).toEqual({ x: wp.x + NODE_WIDTH / 2, y: wp.y + NODE_HEIGHT });
     });
   });
 
@@ -184,85 +196,238 @@ describe("computeLayout", () => {
     expect(computeLayout(BIG, "X")).toEqual({ nodes: [], marriages: [], descents: [] });
   });
 
-  it("1人だけなら中心ノードのみ", () => {
+  it("1人だけならそのノードのみ", () => {
     const layout = computeLayout(treeOf(...indi("I1", "U")), "I1");
-    expect(layout.nodes).toEqual([
-      { id: "I1", x: 0, y: expect.any(Number), label: "I1", sex: "U", generation: 0, isCenter: true },
-    ]);
+    expect(layout.nodes).toEqual([{ id: "I1", x: 0, y: 0, label: "I1", sex: "U", generation: 0, isCenter: true }]);
     expect(layout.marriages).toEqual([]);
     expect(layout.descents).toEqual([]);
   });
 
-  it("女性の中心は配偶者を右に置く", () => {
-    const layout = computeLayout(treeOf(...indi("A", "M", "FAMS:F1"), ...indi("B", "F", "FAMS:F1"), ...fam("F1", "A", "B")), "B");
-    expect(nodeOf(layout, "A").x).toBeGreaterThan(nodeOf(layout, "B").x);
+  it("女性の再婚は配偶者を右に並べ、子も右に向かって婚姻順に並べる", () => {
+    const layout = computeLayout(
+      treeOf(
+        ...indi("A", "F", "FAMS:F1", "FAMS:F2"),
+        ...indi("H1", "M", "FAMS:F1"),
+        ...indi("H2", "M", "FAMS:F2"),
+        ...indi("K1", "U", "FAMC:F1"),
+        ...indi("K2", "U", "FAMC:F2"),
+        ...fam("F1", "H1", "A", ["K1"]),
+        ...fam("F2", "H2", "A", ["K2"]),
+      ),
+      "A",
+    );
+    const xs = ["A", "H1", "H2"].map((id) => nodeOf(layout, id).x);
+    expect([...xs].sort((a, b) => a - b)).toEqual(xs);
+    expect(nodeOf(layout, "K1").x).toBeLessThan(nodeOf(layout, "K2").x);
+    expectNoOverlap(layout);
   });
 
-  it("相手のいない家族の子は本人の下端から線を引く", () => {
-    const layout = computeLayout(treeOf(...indi("A", "F", "FAMS:F1"), ...indi("K", "M", "FAMC:F1"), ...fam("F1", undefined, "A", ["K"])), "A");
+  it("相手のいない家族の子は本人の下端から線を引き、配偶者と反対側に並べる", () => {
+    const layout = computeLayout(
+      treeOf(
+        ...indi("A", "M", "FAMS:F1", "FAMS:F2"),
+        ...indi("W", "F", "FAMS:F1"),
+        ...indi("K1", "U", "FAMC:F1"),
+        ...indi("K2", "U", "FAMC:F2"),
+        ...fam("F1", "A", "W", ["K1"]),
+        ...fam("F2", "A", undefined, ["K2"]),
+      ),
+      "A",
+    );
     const a = nodeOf(layout, "A");
-    expect(layout.descents[0]!.points.slice(0, 2)).toEqual([a.x + NODE_WIDTH / 2, a.y + NODE_HEIGHT]);
-    expectDescentTo(layout, "K");
+    expect(descentOriginTo(layout, "K2")).toEqual({ x: a.x + NODE_WIDTH / 2, y: a.y + NODE_HEIGHT });
+    expect(nodeOf(layout, "K2").x).toBeGreaterThan(nodeOf(layout, "K1").x);
   });
 
   it("片親の親は1ノードで、その下端から線を引く", () => {
     const layout = computeLayout(treeOf(...indi("P", "M", "FAMS:F1"), ...indi("C", "U", "FAMC:F1"), ...fam("F1", "P", undefined, ["C"])), "C");
-    expect(layout.nodes.map((n) => n.id)).toEqual(["C", "P"]);
+    expect(ids(layout)).toEqual(["C", "P"]);
     expectDescentTo(layout, "C");
   });
 
-  it("親のいない親の家族は兄弟のみ並べ、線を引かない", () => {
+  it("親のいない親の家族は兄弟を横に並べ、線を引かない", () => {
     const layout = computeLayout(treeOf(...indi("A", "M", "FAMC:F1"), ...indi("B", "F", "FAMC:F1"), ...fam("F1", undefined, undefined, ["A", "B"])), "B");
     expect(layout.nodes.map((n) => n.id)).toEqual(["A", "B"]);
+    expect(nodeOf(layout, "A").y).toBe(nodeOf(layout, "B").y);
     expect(layout.descents).toEqual([]);
   });
 
-  it("祖父母が片側のみ・片親のみでも配置する", () => {
+  it("つながりの無い人物は右に並べる", () => {
+    const layout = computeLayout(
+      treeOf(...indi("A", "M", "FAMS:F1"), ...indi("B", "F", "FAMS:F1"), ...fam("F1", "A", "B"), ...indi("Z", "U")),
+      "Z",
+    );
+    expect(nodeOf(layout, "Z").x).toBe(nodeOf(layout, "A").x + NODE_WIDTH + GAP_X);
+  });
+
+  it("配偶者の別の配偶者は、その配偶者の横に置いて婚姻線で結ぶ", () => {
+    // A の妻 W は前夫 X との間に子 K がいる
+    const layout = computeLayout(
+      treeOf(
+        ...indi("A", "M", "FAMS:F1"),
+        ...indi("W", "F", "FAMS:F1", "FAMS:F2"),
+        ...indi("X", "M", "FAMS:F2"),
+        ...indi("K", "U", "FAMC:F2"),
+        ...fam("F1", "A", "W"),
+        ...fam("F2", "X", "W", ["K"]),
+      ),
+      "A",
+    );
+    expectNoOverlap(layout);
+    const w = nodeOf(layout, "W");
+    const x = nodeOf(layout, "X");
+    expect(x.y).toBe(w.y);
+    expect(layout.marriages).toHaveLength(2);
+    const [left, right] = [w, x].sort((a, b) => a.x - b.x) as [typeof w, typeof w];
+    expect(layout.marriages).toContainEqual({ points: [left.x + NODE_WIDTH, w.y + NODE_HEIGHT / 2, right.x, w.y + NODE_HEIGHT / 2] });
+    expectDescentTo(layout, "K");
+  });
+
+  it("配偶者として並べた人の、相手のいない家族の子は兄弟を並べて親から線を引く", () => {
+    const layout = computeLayout(
+      treeOf(
+        ...indi("A", "M", "FAMS:F1"),
+        ...indi("W", "F", "FAMS:F1", "FAMS:F2"),
+        ...indi("K1", "U", "FAMC:F2"),
+        ...indi("K2", "U", "FAMC:F2"),
+        ...fam("F1", "A", "W"),
+        ...fam("F2", undefined, "W", ["K1", "K2"]),
+      ),
+      "A",
+    );
+    const w = nodeOf(layout, "W");
+    for (const id of ["K1", "K2"]) {
+      expect(descentOriginTo(layout, id)).toEqual({ x: w.x + NODE_WIDTH / 2, y: w.y + NODE_HEIGHT });
+      expect(nodeOf(layout, id).generation).toBe(w.generation + 1);
+    }
+    expect(nodeOf(layout, "K2").x).toBe(nodeOf(layout, "K1").x + NODE_WIDTH + GAP_X);
+  });
+
+  it("夫の別の妻は、夫の左に置いて婚姻線で結ぶ", () => {
+    // A の夫 H は前妻 X との間に子 K がいる
+    const layout = computeLayout(
+      treeOf(
+        ...indi("A", "F", "FAMS:F1"),
+        ...indi("H", "M", "FAMS:F1", "FAMS:F2"),
+        ...indi("X", "F", "FAMS:F2"),
+        ...indi("K", "U", "FAMC:F2"),
+        ...fam("F1", "H", "A"),
+        ...fam("F2", "H", "X", ["K"]),
+      ),
+      "A",
+    );
+    expectNoOverlap(layout);
+    expect(nodeOf(layout, "X").x).toBeLessThan(nodeOf(layout, "H").x);
+    expect(layout.marriages).toHaveLength(2);
+    expectDescentTo(layout, "K");
+  });
+
+  it("いとこ婚は同じブロック内の相手と婚姻線で結ぶ", () => {
     const layout = computeLayout(
       treeOf(
         ...indi("GF", "M", "FAMS:FG"),
-        ...indi("F", "M", "FAMC:FG", "FAMS:FC"),
-        ...indi("M", "F", "FAMS:FC"),
-        ...indi("C", "U", "FAMC:FC"),
-        ...fam("FG", "GF", undefined, ["F"]),
-        ...fam("FC", "F", "M", ["C"]),
+        ...indi("P1", "M", "FAMC:FG", "FAMS:F1"),
+        ...indi("P2", "F", "FAMC:FG", "FAMS:F2"),
+        ...indi("H", "M", "FAMC:F1", "FAMS:F3"),
+        ...indi("W", "F", "FAMC:F2", "FAMS:F3"),
+        ...indi("K", "U", "FAMC:F3"),
+        ...fam("FG", "GF", undefined, ["P1", "P2"]),
+        ...fam("F1", "P1", undefined, ["H"]),
+        ...fam("F2", undefined, "P2", ["W"]),
+        ...fam("F3", "H", "W", ["K"]),
       ),
-      "C",
+      "GF",
     );
-    expect(nodeOf(layout, "GF").generation).toBe(-2);
-    expectDescentTo(layout, "F");
+    expect(ids(layout)).toEqual(["GF", "H", "K", "P1", "P2", "W"]);
     expectNoOverlap(layout);
+    expect(layout.marriages).toHaveLength(1);
+    for (const id of ["P1", "P2", "H", "W", "K"]) expectDescentTo(layout, id);
   });
 
-  it("祖父母の家族に祖父母がいなければ祖父母の行は空", () => {
+  it("兄弟が別の家族の子として配置済みなら、その兄弟は並べ直さない", () => {
+    // K2 は A・W の子でもある
     const layout = computeLayout(
       treeOf(
-        ...indi("F", "M", "FAMC:FG", "FAMS:FC"),
-        ...indi("C", "U", "FAMC:FC"),
-        ...fam("FG", undefined, undefined, ["F"]),
-        ...fam("FC", "F", undefined, ["C"]),
+        ...indi("A", "M", "FAMS:F1"),
+        ...indi("W", "F", "FAMS:F1", "FAMS:F2"),
+        ...indi("K1", "U", "FAMC:F2"),
+        ...indi("K2", "U", "FAMC:F1", "FAMC:F2"),
+        ...fam("F1", "A", "W", ["K2"]),
+        ...fam("F2", undefined, "W", ["K1", "K2"]),
       ),
-      "C",
+      "A",
     );
-    expect(layout.nodes.map((n) => n.id)).toEqual(["C", "F"]);
+    expect(ids(layout)).toEqual(["A", "K1", "K2", "W"]);
+    expectNoOverlap(layout);
+    expectDescentTo(layout, "K1");
+    expectDescentTo(layout, "K2");
   });
 
-  it("祖父母が両側とも片親なら重ならず押し広げない", () => {
+  it("兄弟の両方と結婚した人物は、後の婚姻を婚姻線で結ぶ", () => {
     const layout = computeLayout(
       treeOf(
-        ...indi("PG", "M", "FAMS:FP"),
-        ...indi("MG", "F", "FAMS:FM"),
-        ...indi("F", "M", "FAMC:FP", "FAMS:FC"),
-        ...indi("M", "F", "FAMC:FM", "FAMS:FC"),
-        ...indi("C", "U", "FAMC:FC"),
-        ...fam("FP", "PG", undefined, ["F"]),
-        ...fam("FM", undefined, "MG", ["M"]),
-        ...fam("FC", "F", "M", ["C"]),
+        ...indi("R", "M", "FAMS:FR"),
+        ...indi("C1", "M", "FAMC:FR", "FAMS:F1"),
+        ...indi("C2", "M", "FAMC:FR", "FAMS:F2"),
+        ...indi("S", "F", "FAMS:F1", "FAMS:F2"),
+        ...fam("FR", "R", undefined, ["C1", "C2"]),
+        ...fam("F1", "C1", "S"),
+        ...fam("F2", "C2", "S"),
       ),
-      "C",
+      "R",
     );
-    expect(nodeOf(layout, "PG").x).toBe(nodeOf(layout, "F").x);
-    expect(nodeOf(layout, "MG").x).toBe(nodeOf(layout, "M").x);
+    expect(ids(layout)).toEqual(["C1", "C2", "R", "S"]);
+    expectNoOverlap(layout);
+    expect(layout.marriages).toHaveLength(2);
+  });
+
+  it("同じ家族への重複したリンクは1回だけ扱う", () => {
+    const tree = treeOf(...indi("A", "M", "FAMS:F1"), ...indi("B", "F", "FAMS:F1"), ...fam("F1", "A", "B"));
+    tree.individuals[0]!.familiesAsSpouse.push({ id: "F1", extras: [] });
+    const layout = computeLayout(tree, "A");
+    expect(ids(layout)).toEqual(["A", "B"]);
+    expect(layout.marriages).toHaveLength(1);
+  });
+
+  it("別々の人の配偶者同士の子は、両親の間から線を引き両親を婚姻線で結ぶ", () => {
+    // H は P の妻の兄弟… ではなく、H・W ともに別の人物の配偶者として並び、H と W の間に子 K がいる
+    const layout = computeLayout(
+      treeOf(
+        ...indi("P", "F", "FAMS:F1"),
+        ...indi("H", "M", "FAMS:F1", "FAMS:F3"),
+        ...indi("Q", "M", "FAMS:F2"),
+        ...indi("W", "F", "FAMS:F2", "FAMS:F3"),
+        ...indi("K", "U", "FAMC:F3"),
+        ...fam("F1", "H", "P"),
+        ...fam("F2", "Q", "W"),
+        ...fam("F3", "H", "W", ["K"]),
+      ),
+      "P",
+    );
+    expectNoOverlap(layout);
+    expectDescentTo(layout, "K");
+    expect(layout.marriages).toHaveLength(3);
+  });
+
+  it("循環した親子関係でも全員を配置する", () => {
+    const layout = computeLayout(
+      treeOf(
+        ...indi("A", "M", "FAMC:F2", "FAMS:F1"),
+        ...indi("B", "M", "FAMC:F1", "FAMS:F2"),
+        ...fam("F1", "A", undefined, ["B"]),
+        ...fam("F2", "B", undefined, ["A"]),
+      ),
+      "A",
+    );
+    expect(ids(layout)).toEqual(["A", "B"]);
+  });
+
+  it("自分自身との婚姻は線を引かない", () => {
+    const tree = treeOf(...indi("A", "M", "FAMS:F1"), ...fam("F1", "A"));
+    tree.families[0]!.wife = { id: "A", extras: [] };
+    const layout = computeLayout(tree, "A");
+    expect(ids(layout)).toEqual(["A"]);
+    expect(layout.marriages).toEqual([]);
   });
 
   it("参照先が欠けたリンクは無視する", () => {

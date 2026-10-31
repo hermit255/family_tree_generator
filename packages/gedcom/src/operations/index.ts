@@ -4,6 +4,7 @@ export {
   addParent,
   addSpouse,
   availableParentRoles,
+  PARENT_DEFAULT_SEX,
   type AddResult,
   type ParentRole,
 } from "./add";

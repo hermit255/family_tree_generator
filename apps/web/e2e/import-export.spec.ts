@@ -102,10 +102,10 @@ test.describe("エクスポート", () => {
     const file = await exportAs(page, "画像 (.png)");
     expect(file.name).toMatch(FILE_NAME);
     expect(file.body.subarray(1, 4).toString("latin1")).toBe("PNG");
-    // 画面の大きさに依存せず、同梱サンプルの表示範囲全体を2倍の解像度で描く
+    // 画面の大きさに依存せず、同梱サンプルの家系図全体を2倍の解像度で描く
     expect({ width: file.body.readUInt32BE(16), height: file.body.readUInt32BE(20) }).toEqual({
-      width: 1414,
-      height: 1280,
+      width: 1688,
+      height: 1152,
     });
   });
 

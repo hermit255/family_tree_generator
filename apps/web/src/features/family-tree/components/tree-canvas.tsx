@@ -157,9 +157,8 @@ export default function TreeCanvas({
             ))}
           </Group>
         ))}
-        {layout.nodes.map((node, index) => (
-          // 同一人物が複数位置に現れる(近親婚等)場合があるため index を含める
-          <PersonNode key={`${node.id}-${index}`} node={node} onSelect={onSelect} />
+        {layout.nodes.map((node) => (
+          <PersonNode key={node.id} node={node} onSelect={onSelect} />
         ))}
       </Layer>
     </Stage>

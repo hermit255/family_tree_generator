@@ -29,21 +29,23 @@ describe("AddPersonDialog", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it("配偶者を追加する", () => {
+  it("配偶者を追加する(姓は継承しない)", () => {
     setupStore("0 @I1@ INDI", "1 NAME 太郎 /山田/", "1 SEX M");
     open({ kind: "spouse", personId: "I1" });
     expect(screen.getByText("山田 太郎 の配偶者(新しい家族として追加します)")).toBeVisible();
+    expect(screen.getByLabelText("姓")).toHaveValue("");
     fillAndSubmit("佐藤");
     expect(family("F1")).toMatchObject({ husband: { id: "I1" }, wife: { id: "I2" } });
   });
 
   describe("親を追加", () => {
-    it("父母とも追加できる場合は続柄を選び、性別欄は表示しない", () => {
+    it("父母とも追加できる場合は続柄を選び、性別の初期値は続柄に合わせる", () => {
       setupStore("0 @I1@ INDI");
       open({ kind: "parent", childId: "I1" });
       expect(screen.getByRole("heading", { name: "親を追加" })).toBeVisible();
-      expect(screen.queryByText("性別")).toBeNull();
+      expect(screen.getByRole("radio", { name: "男性" })).toBeChecked();
       fireEvent.click(screen.getByRole("radio", { name: "母" }));
+      expect(screen.getByRole("radio", { name: "女性" })).toBeChecked();
       fillAndSubmit("佐藤");
       expect(person("I2")).toMatchObject({ sex: "F" });
       expect(family("F1")).toMatchObject({ wife: { id: "I2" }, children: [{ id: "I1" }] });
@@ -56,6 +58,17 @@ describe("AddPersonDialog", () => {
       expect(screen.queryByText("続柄")).toBeNull();
       fillAndSubmit("佐藤");
       expect(family("F1")).toMatchObject({ husband: { id: "I2" }, wife: { id: "I3" } });
+    });
+
+    it("性別は初期値から変更でき、姓は選択中の人物から継承する", () => {
+      setupStore("0 @I1@ INDI", "1 NAME 太郎 /山田/");
+      open({ kind: "parent", childId: "I1" });
+      expect(screen.getByLabelText("姓")).toHaveValue("山田");
+      fireEvent.change(screen.getByLabelText("名"), { target: { value: "一郎" } });
+      fireEvent.click(screen.getByRole("radio", { name: "不明" }));
+      fireEvent.click(screen.getByRole("button", { name: "追加" }));
+      expect(person("I2")).toMatchObject({ surname: "山田", givenName: "一郎", sex: "U" });
+      expect(family("F1")).toMatchObject({ husband: { id: "I2" } });
     });
   });
 
@@ -94,6 +107,13 @@ describe("AddPersonDialog", () => {
       fireEvent.click(screen.getByRole("radio", { name: "配偶者なし" }));
       fillAndSubmit("山田");
       expect(family("F3")).toMatchObject({ husband: { id: "I1" }, children: [{ id: "I4" }] });
+    });
+
+    it("姓は選択中の人物から継承し、性別の初期値は不明", () => {
+      setupStore("0 @I1@ INDI", "1 NAME 太郎 /山田/");
+      open({ kind: "child", parentId: "I1" });
+      expect(screen.getByLabelText("姓")).toHaveValue("山田");
+      expect(screen.getByRole("radio", { name: "不明" })).toBeChecked();
     });
 
     it("配偶者が1人なら選択肢を出さずその家族に追加する", () => {

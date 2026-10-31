@@ -1,6 +1,12 @@
 "use client";
 
-import { availableParentRoles, type FamilyTree, type ParentRole, type PersonInput } from "@kakeizu/gedcom";
+import {
+  availableParentRoles,
+  PARENT_DEFAULT_SEX,
+  type FamilyTree,
+  type ParentRole,
+  type PersonInput,
+} from "@kakeizu/gedcom";
 import { useId, useState } from "react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -56,6 +62,12 @@ const nameOf = (tree: FamilyTree, id: string) => {
   return person ? displayName(person) : id;
 };
 
+/** 親・子の追加では選択中の人物の姓を初期値にする */
+const inheritedSurname = (mode: AddMode, tree: FamilyTree): string | undefined => {
+  const id = mode.kind === "parent" ? mode.childId : mode.kind === "child" ? mode.parentId : undefined;
+  return tree.individuals.find((i) => i.id === id)?.surname;
+};
+
 function AddPersonForm({ mode, tree, onDone }: { mode: AddMode; tree: FamilyTree; onDone: () => void }) {
   const actions = useFamilyTreeStore.getState();
   const roles = mode.kind === "parent" ? availableParentRoles(tree, mode.childId) : [];
@@ -90,7 +102,12 @@ function AddPersonForm({ mode, tree, onDone }: { mode: AddMode; tree: FamilyTree
   };
 
   return (
-    <PersonForm submitLabel="追加" hideSex={mode.kind === "parent"} onSubmit={submit} onCancel={onDone}>
+    <PersonForm
+      defaultValues={{ surname: inheritedSurname(mode, tree), sex: role && PARENT_DEFAULT_SEX[role] }}
+      submitLabel="追加"
+      onSubmit={submit}
+      onCancel={onDone}
+    >
       {roles.length > 1 && (
         <ChoiceField
           legend="続柄"

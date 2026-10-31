@@ -13,9 +13,8 @@ type Values = { givenName: string; surname: string; sex: Sex };
 type Errors = Partial<Record<keyof Values, string>>;
 
 type Props = {
+  /** 初期値。表示中に性別の初期値が変わった場合(親の追加で続柄を切り替えた場合など)は性別の入力を追従させる */
   defaultValues?: PersonInput;
-  /** 性別を入力させない(親の追加など、性別が決まっている場合) */
-  hideSex?: boolean;
   submitLabel: string;
   /** 入力が妥当な場合に呼ばれる */
   onSubmit: (input: PersonInput) => void;
@@ -24,13 +23,19 @@ type Props = {
   children?: ReactNode;
 };
 
-export function PersonForm({ defaultValues, hideSex, submitLabel, onSubmit, onCancel, children }: Props) {
+export function PersonForm({ defaultValues, submitLabel, onSubmit, onCancel, children }: Props) {
   const id = useId();
+  const defaultSex = defaultValues?.sex ?? "U";
   const [values, setValues] = useState<Values>({
     givenName: defaultValues?.givenName ?? "",
     surname: defaultValues?.surname ?? "",
-    sex: defaultValues?.sex ?? "U",
+    sex: defaultSex,
   });
+  const [prevDefaultSex, setPrevDefaultSex] = useState(defaultSex);
+  if (defaultSex !== prevDefaultSex) {
+    setPrevDefaultSex(defaultSex);
+    setValues((v) => ({ ...v, sex: defaultSex }));
+  }
   const [errors, setErrors] = useState<Errors>({});
 
   const handleSubmit = (event: FormEvent) => {
@@ -73,21 +78,19 @@ export function PersonForm({ defaultValues, hideSex, submitLabel, onSubmit, onCa
           </Field>
         </div>
         <FieldError>{errors.givenName ?? errors.surname}</FieldError>
-        {!hideSex && (
-          <FieldSet>
-            <FieldLegend variant="label">性別</FieldLegend>
-            <RadioGroup value={values.sex} onValueChange={(value) => set("sex")(value as Sex)} className="flex flex-wrap gap-4">
-              {(Object.keys(SEX_LABELS) as Sex[]).map((sex) => (
-                <Field key={sex} orientation="horizontal" className="w-auto">
-                  <RadioGroupItem value={sex} id={`${id}-sex-${sex}`} />
-                  <FieldLabel htmlFor={`${id}-sex-${sex}`} className="font-normal">
-                    {SEX_LABELS[sex]}
-                  </FieldLabel>
-                </Field>
-              ))}
-            </RadioGroup>
-          </FieldSet>
-        )}
+        <FieldSet>
+          <FieldLegend variant="label">性別</FieldLegend>
+          <RadioGroup value={values.sex} onValueChange={(value) => set("sex")(value as Sex)} className="flex flex-wrap gap-4">
+            {(Object.keys(SEX_LABELS) as Sex[]).map((sex) => (
+              <Field key={sex} orientation="horizontal" className="w-auto">
+                <RadioGroupItem value={sex} id={`${id}-sex-${sex}`} />
+                <FieldLabel htmlFor={`${id}-sex-${sex}`} className="font-normal">
+                  {SEX_LABELS[sex]}
+                </FieldLabel>
+              </Field>
+            ))}
+          </RadioGroup>
+        </FieldSet>
         <div className="flex justify-end gap-2">
           {onCancel && (
             <Button type="button" variant="outline" onClick={onCancel}>
