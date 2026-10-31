@@ -15,24 +15,24 @@ const { tree } = importGedcom(SAMPLE_GEDCOM);
 
 describe("createExportBlob", () => {
   it(".ged は GEDCOM 文字列", async () => {
-    const blob = await createExportBlob("ged", { tree, centerId: undefined });
+    const blob = await createExportBlob("ged", { tree });
     expect(await blob.text()).toMatch(/^0 HEAD/);
   });
 
-  it("PNG は中心人物の画像を描いて PNG にする", async () => {
-    const blob = await createExportBlob("png", { tree, centerId: "I1" });
-    expect(image.renderTreeImage).toHaveBeenCalledWith({ tree, centerId: "I1" });
+  it("PNG は家系図の画像を描いて PNG にする", async () => {
+    const blob = await createExportBlob("png", { tree });
+    expect(image.renderTreeImage).toHaveBeenCalledWith({ tree });
     expect(await blob.text()).toBe("png");
   });
 
   it("PDF は描いた画像を PDF に埋め込む", async () => {
-    const blob = await createExportBlob("pdf", { tree, centerId: "I1" });
+    const blob = await createExportBlob("pdf", { tree });
     expect(pdf.imageToPdfBlob).toHaveBeenCalledWith({ canvas: "canvas", width: 10, height: 20 });
     expect(await blob.text()).toBe("pdf");
   });
 
-  it("中心人物がいなければ画像は出力できない", async () => {
-    await expect(createExportBlob("png", { tree, centerId: undefined })).rejects.toThrow("画像に出力する人物がいません");
+  it("人物がいなければ画像は出力できない", async () => {
+    await expect(createExportBlob("png", { tree: { ...tree, individuals: [] } })).rejects.toThrow("画像に出力する人物がいません");
   });
 });
 

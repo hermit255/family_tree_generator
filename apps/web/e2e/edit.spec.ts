@@ -2,11 +2,11 @@ import { expect, test } from "@playwright/test";
 import { detailPanel, fillAddDialog, nodeMenu, openApp, personButton, selectPerson } from "./helpers";
 
 test.describe("人物の追加・編集・削除", () => {
-  test("親を追加する(父母が揃うと親の追加は表示しない)", async ({ page }) => {
+  test("親を追加する(最初の親は性別で父母を決め、父母が揃うと親の追加は表示しない)", async ({ page }) => {
     await openApp(page);
     await selectPerson(page, "山田 美穂");
     await nodeMenu(page).getByRole("button", { name: "親を追加" }).click();
-    await fillAddDialog(page, { surname: "田中", givenName: "花子", choice: "母" });
+    await fillAddDialog(page, { surname: "田中", givenName: "花子", choice: "女性" });
     await expect(personButton(page, "田中 花子")).toBeVisible();
 
     await nodeMenu(page).getByRole("button", { name: "親を追加" }).click();

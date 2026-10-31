@@ -142,8 +142,7 @@ const EXPORT_FORMATS = Object.keys(EXPORT_LABELS) as ExportFormat[];
 /** v1 はフィルタ機能が無いため、常に現在のデータを対象とする */
 function useCurrentTarget(): ExportTarget | null {
   const tree = useFamilyTreeStore((s) => s.tree);
-  const centerId = useFamilyTreeStore((s) => s.centerId);
-  return tree ? { tree, centerId } : null;
+  return tree ? { tree } : null;
 }
 
 function ExportItems({ target }: { target: ExportTarget | null }) {

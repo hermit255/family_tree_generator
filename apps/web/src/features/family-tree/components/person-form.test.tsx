@@ -41,11 +41,19 @@ describe("PersonForm", () => {
     expect(screen.queryByRole("button", { name: "キャンセル" })).toBeNull();
   });
 
-  it("性別の初期値が変わると、入力中の姓名を保ったまま性別を追従させる", () => {
-    const { rerender } = render(<PersonForm defaultValues={{ sex: "M" }} submitLabel="追加" onSubmit={vi.fn()} />);
+  it("sexOptions で性別の選択肢を絞り、選択肢に無い値は未選択として送信時にエラーにする", () => {
+    const onSubmit = vi.fn();
+    render(<PersonForm sexOptions={["M", "F"]} submitLabel="追加" onSubmit={onSubmit} />);
+    expect(screen.getAllByRole("radio")).toHaveLength(2);
+    expect(screen.getByRole("radio", { name: "男性" })).not.toBeChecked();
     fireEvent.change(screen.getByLabelText("姓"), { target: { value: "山田" } });
-    rerender(<PersonForm defaultValues={{ sex: "F" }} submitLabel="追加" onSubmit={vi.fn()} />);
-    expect(screen.getByRole("radio", { name: "女性" })).toBeChecked();
-    expect(screen.getByLabelText("姓")).toHaveValue("山田");
+    fireEvent.click(screen.getByRole("button", { name: "追加" }));
+    expect(screen.getByText("性別を選択してください")).toBeVisible();
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("radio", { name: "女性" }));
+    fireEvent.click(screen.getByRole("button", { name: "追加" }));
+    expect(screen.queryByText("性別を選択してください")).toBeNull();
+    expect(onSubmit).toHaveBeenCalledWith({ givenName: "", surname: "山田", sex: "F" });
   });
 });

@@ -6,6 +6,7 @@ import {
   type FamilyTree,
   type ParentRole,
   type PersonInput,
+  type Sex,
 } from "@kakeizu/gedcom";
 import { useId, useState } from "react";
 import { toast } from "sonner";
@@ -68,10 +69,26 @@ const inheritedSurname = (mode: AddMode, tree: FamilyTree): string | undefined =
   return tree.individuals.find((i) => i.id === id)?.surname;
 };
 
+/** 配偶者の追加では選択中の人物と異なる性を初期値にする(男女以外は不明) */
+const OPPOSITE_SEX: Partial<Record<Sex, Sex>> = { M: "F", F: "M" };
+
+/** 親の性別は男女から必須で選ぶ。父母とも追加できる場合は性別で続柄を決める */
+const PARENT_SEX_OPTIONS: Sex[] = ["M", "F"];
+const ROLE_BY_SEX: Partial<Record<Sex, ParentRole>> = { M: "father", F: "mother" };
+
+/** 性別の初期値。続柄が決まっている親はその既定値、配偶者は選択中の人物と異なる性 */
+const defaultSex = (mode: AddMode, tree: FamilyTree, role: ParentRole | undefined): Sex | undefined => {
+  if (role) return PARENT_DEFAULT_SEX[role];
+  if (mode.kind !== "spouse") return undefined;
+  const sex = tree.individuals.find((i) => i.id === mode.personId)?.sex;
+  return sex && OPPOSITE_SEX[sex];
+};
+
 function AddPersonForm({ mode, tree, onDone }: { mode: AddMode; tree: FamilyTree; onDone: () => void }) {
   const actions = useFamilyTreeStore.getState();
   const roles = mode.kind === "parent" ? availableParentRoles(tree, mode.childId) : [];
-  const [role, setRole] = useState<ParentRole | undefined>(roles[0]);
+  // 追加できる続柄が1つならそれに決まる。2つなら入力された性別で決める
+  const role = roles.length === 1 ? roles[0] : undefined;
 
   // 配偶者が2人以上いる場合のみ、どの配偶者との子かを選ばせる
   const partners = mode.kind === "child" ? spouseFamiliesOf(tree, mode.parentId).filter((s) => s.partner) : [];
@@ -84,7 +101,7 @@ function AddPersonForm({ mode, tree, onDone }: { mode: AddMode; tree: FamilyTree
         result = actions.addFirst(input);
         break;
       case "parent":
-        result = actions.addParent(mode.childId, role!, input);
+        result = actions.addParent(mode.childId, role ?? ROLE_BY_SEX[input.sex!]!, input);
         break;
       case "spouse":
         result = actions.addSpouse(mode.personId, input);
@@ -103,19 +120,12 @@ function AddPersonForm({ mode, tree, onDone }: { mode: AddMode; tree: FamilyTree
 
   return (
     <PersonForm
-      defaultValues={{ surname: inheritedSurname(mode, tree), sex: role && PARENT_DEFAULT_SEX[role] }}
+      defaultValues={{ surname: inheritedSurname(mode, tree), sex: defaultSex(mode, tree, role) }}
+      sexOptions={mode.kind === "parent" ? PARENT_SEX_OPTIONS : undefined}
       submitLabel="追加"
       onSubmit={submit}
       onCancel={onDone}
     >
-      {roles.length > 1 && (
-        <ChoiceField
-          legend="続柄"
-          options={roles.map((r) => ({ value: r, label: PARENT_LABELS[r] }))}
-          value={role!}
-          onChange={(v) => setRole(v as ParentRole)}
-        />
-      )}
       {partners.length > 1 && (
         <ChoiceField
           legend="どの配偶者との子か"
@@ -138,7 +148,8 @@ const titleOf = (mode: AddMode, tree: FamilyTree): { title: string; description?
     case "parent": {
       const roles = availableParentRoles(tree, mode.childId);
       const title = roles.length === 1 ? `${PARENT_LABELS[roles[0]!]}を追加` : "親を追加";
-      return { title, description: `${nameOf(tree, mode.childId)} の親` };
+      const note = roles.length === 1 ? "" : "(性別で父・母を決めます)";
+      return { title, description: `${nameOf(tree, mode.childId)} の親${note}` };
     }
     case "spouse":
       return { title: "配偶者を追加", description: `${nameOf(tree, mode.personId)} の配偶者(新しい家族として追加します)` };

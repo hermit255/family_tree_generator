@@ -192,8 +192,17 @@ describe("computeLayout", () => {
     });
   });
 
-  it("中心が存在しなければ空", () => {
-    expect(computeLayout(BIG, "X")).toEqual({ nodes: [], marriages: [], descents: [] });
+  it("未選択(または存在しない人物)なら配置は同じで、強調する人物がいない", () => {
+    const selected = computeLayout(BIG, "C");
+    for (const centerId of [undefined, "X"]) {
+      const layout = computeLayout(BIG, centerId);
+      expect(layout.nodes.some((n) => n.isCenter)).toBe(false);
+      expect(layout.nodes.map((n) => [n.id, n.x, n.y])).toEqual(selected.nodes.map((n) => [n.id, n.x, n.y]));
+    }
+  });
+
+  it("人物がいなければ空", () => {
+    expect(computeLayout(treeOf(), undefined)).toEqual({ nodes: [], marriages: [], descents: [] });
   });
 
   it("1人だけならそのノードのみ", () => {

@@ -26,12 +26,13 @@ export function FamilyTreeView({ focusRatio, onAdd }: Props) {
   const centerId = useFamilyTreeStore((s) => s.centerId);
   const detailOpen = useFamilyTreeStore((s) => s.detailOpen);
   const select = useFamilyTreeStore((s) => s.select);
+  const deselect = useFamilyTreeStore((s) => s.deselect);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const size = useElementSize(containerRef);
   const [viewport, setViewport] = useState<Viewport | null>(null);
 
-  const layout = useMemo(() => (tree && centerId ? computeLayout(tree, centerId) : null), [tree, centerId]);
+  const layout = useMemo(() => (tree ? computeLayout(tree, centerId) : null), [tree, centerId]);
   const center = layout?.nodes.find((n) => n.isCenter);
 
   return (
@@ -42,7 +43,7 @@ export function FamilyTreeView({ focusRatio, onAdd }: Props) {
           <Button onClick={() => onAdd({ kind: "first" })}>最初の人物を追加</Button>
         </div>
       )}
-      {size && layout && centerId && center && (
+      {size && layout && layout.nodes.length > 0 && (
         <TreeCanvas
           layout={layout}
           centerId={centerId}
@@ -50,6 +51,7 @@ export function FamilyTreeView({ focusRatio, onAdd }: Props) {
           height={size.height}
           focusHeight={size.height * focusRatio}
           onSelect={select}
+          onDeselect={deselect}
           onViewportChange={setViewport}
         />
       )}

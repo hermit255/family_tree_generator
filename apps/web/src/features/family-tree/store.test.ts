@@ -130,6 +130,12 @@ describe("追加・更新・削除", () => {
     expect(store()).toMatchObject({ centerId: "I2", detailOpen: false });
   });
 
+  it("deselect で選択を解除し、詳細パネルを閉じる", () => {
+    store().select("I2");
+    store().deselect();
+    expect(store()).toMatchObject({ centerId: undefined, detailOpen: false });
+  });
+
   it("中心以外の人物を削除しても中心・詳細パネルは変わらない", () => {
     store().addChild("I1", "F1", { givenName: "一郎" });
     store().select("I2");

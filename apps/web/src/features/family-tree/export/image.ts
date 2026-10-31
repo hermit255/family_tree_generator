@@ -13,10 +13,10 @@ export type TreeImage = { canvas: HTMLCanvasElement; width: number; height: numb
 
 /**
  * 家系図全体を、画面のパン・ズームと無関係に描いた canvas を返す。
- * 画像では中心人物を強調しない
+ * 画像では選択中の人物を強調しない
  */
-export const renderTreeImage = (target: ExportTarget & { centerId: string }): TreeImage => {
-  const layout = computeLayout(target.tree, target.centerId);
+export const renderTreeImage = (target: ExportTarget): TreeImage => {
+  const layout = computeLayout(target.tree, undefined);
   const bounds = layoutBounds(layout);
   const width = Math.ceil(bounds.width + PADDING * 2);
   const height = Math.ceil(bounds.height + PADDING * 2);

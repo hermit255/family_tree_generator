@@ -25,7 +25,7 @@ type FamilyTreeState = {
   /** localStorage からの復元が完了したか */
   hydrated: boolean;
   tree: FamilyTree | null;
-  /** 表示の中心とする人物 */
+  /** 選択中(表示の中心)の人物。何も選択していない場合は undefined */
   centerId: string | undefined;
   /** 直近のインポートで発生した警告 */
   warnings: string[];
@@ -42,6 +42,8 @@ type FamilyTreeActions = {
   /** 人物を中心にして詳細パネルを開く */
   select: (id: string) => void;
   closeDetail: () => void;
+  /** 選択を解除し、詳細パネルを閉じる */
+  deselect: () => void;
   addFirst: (input: PersonInput) => ActionResult<string>;
   addSpouse: (personId: string, input: PersonInput) => ActionResult<string>;
   addChild: (parentId: string, familyId: string | undefined, input: PersonInput) => ActionResult<string>;
@@ -106,6 +108,7 @@ export const useFamilyTreeStore = create<FamilyTreeState & FamilyTreeActions>()(
 
     select: (centerId) => set({ centerId, detailOpen: true }),
     closeDetail: () => set({ detailOpen: false }),
+    deselect: () => set({ centerId: undefined, detailOpen: false }),
 
     addFirst: (input) => {
       const result = applyAdd((tree) => addFirstIndividual(tree, input));

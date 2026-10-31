@@ -28,6 +28,21 @@ test.describe("家系図の表示", () => {
     await expect(nodeMenu(page)).toBeHidden();
   });
 
+  test("ノードの無い場所のクリックで選択を解除する", async ({ page, isMobile }) => {
+    await openApp(page);
+    await selectPerson(page, "山田 陽向");
+    await expect(detailPanel(page)).toBeVisible();
+
+    // 左上の隅はノード・線の無い場所
+    const canvas = page.locator("canvas").first();
+    const corner = { position: { x: 4, y: 4 } };
+    await (isMobile ? canvas.tap(corner) : canvas.click(corner));
+    await expect(detailPanel(page)).toBeHidden();
+    await expect(nodeMenu(page)).toBeHidden();
+    await expect(personList(page).locator("[aria-current]")).toHaveCount(0);
+    await expect(personList(page).getByRole("button")).toHaveCount(14);
+  });
+
   test("人物を選んでも表示範囲は変わらず、選んだ人物が中心になる", async ({ page }) => {
     await openApp(page);
     await selectPerson(page, "山田 陽向");

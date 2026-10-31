@@ -38,37 +38,64 @@ describe("AddPersonDialog", () => {
     expect(family("F1")).toMatchObject({ husband: { id: "I1" }, wife: { id: "I2" } });
   });
 
+  it.each([
+    ["M", "女性"],
+    ["F", "男性"],
+    ["X", "不明"],
+    ["U", "不明"],
+  ])("配偶者の性別の初期値は選択中の人物(%s)と異なる性(%s)", (sex, label) => {
+    setupStore("0 @I1@ INDI", `1 SEX ${sex}`);
+    open({ kind: "spouse", personId: "I1" });
+    expect(screen.getByRole("radio", { name: label })).toBeChecked();
+  });
+
   describe("親を追加", () => {
-    it("父母とも追加できる場合は続柄を選び、性別の初期値は続柄に合わせる", () => {
+    it.each([
+      ["男性", "M", "husband"],
+      ["女性", "F", "wife"],
+    ] as const)("父母とも未登録なら続柄を選ばせず、性別(%s)で父母を決める", (label, sex, slot) => {
       setupStore("0 @I1@ INDI");
       open({ kind: "parent", childId: "I1" });
       expect(screen.getByRole("heading", { name: "親を追加" })).toBeVisible();
-      expect(screen.getByRole("radio", { name: "男性" })).toBeChecked();
-      fireEvent.click(screen.getByRole("radio", { name: "母" }));
-      expect(screen.getByRole("radio", { name: "女性" })).toBeChecked();
+      expect(screen.getByText("(性別で父・母を決めます)", { exact: false })).toBeVisible();
+      expect(screen.queryByText("続柄")).toBeNull();
+      fireEvent.click(screen.getByRole("radio", { name: label }));
       fillAndSubmit("佐藤");
-      expect(person("I2")).toMatchObject({ sex: "F" });
-      expect(family("F1")).toMatchObject({ wife: { id: "I2" }, children: [{ id: "I1" }] });
+      expect(person("I2")).toMatchObject({ sex });
+      expect(family("F1")).toMatchObject({ [slot]: { id: "I2" }, children: [{ id: "I1" }] });
     });
 
-    it("片方のみ追加できる場合は続柄を選ばせない", () => {
+    it("性別は男女のみで必須。未選択なら追加しない", () => {
+      setupStore("0 @I1@ INDI");
+      const onClose = open({ kind: "parent", childId: "I1" });
+      expect(screen.getAllByRole("radio")).toHaveLength(2);
+      expect(screen.getByRole("radio", { name: "男性" })).not.toBeChecked();
+      expect(screen.getByRole("radio", { name: "女性" })).not.toBeChecked();
+      fillAndSubmit("佐藤");
+      expect(screen.getByText("性別を選択してください")).toBeVisible();
+      expect(person("I2")).toBeUndefined();
+      expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it("片方のみ追加できる場合は続柄が決まり、性別の初期値は続柄に合わせる", () => {
       setupStore("0 @I1@ INDI", "1 FAMC @F1@", "0 @I2@ INDI", "1 FAMS @F1@", "0 @F1@ FAM", "1 HUSB @I2@", "1 CHIL @I1@");
       open({ kind: "parent", childId: "I1" });
       expect(screen.getByRole("heading", { name: "母を追加" })).toBeVisible();
-      expect(screen.queryByText("続柄")).toBeNull();
+      expect(screen.getByRole("radio", { name: "女性" })).toBeChecked();
       fillAndSubmit("佐藤");
+      expect(person("I3")).toMatchObject({ sex: "F" });
       expect(family("F1")).toMatchObject({ husband: { id: "I2" }, wife: { id: "I3" } });
     });
 
-    it("性別は初期値から変更でき、姓は選択中の人物から継承する", () => {
-      setupStore("0 @I1@ INDI", "1 NAME 太郎 /山田/");
+    it("姓は選択中の人物から継承し、性別は初期値から変更できる(枠は続柄で決まる)", () => {
+      setupStore("0 @I1@ INDI", "1 NAME 太郎 /山田/", "1 FAMC @F1@", "0 @I2@ INDI", "1 FAMS @F1@", "0 @F1@ FAM", "1 WIFE @I2@", "1 CHIL @I1@");
       open({ kind: "parent", childId: "I1" });
       expect(screen.getByLabelText("姓")).toHaveValue("山田");
-      fireEvent.change(screen.getByLabelText("名"), { target: { value: "一郎" } });
-      fireEvent.click(screen.getByRole("radio", { name: "不明" }));
+      fireEvent.click(screen.getByRole("radio", { name: "女性" }));
+      fireEvent.change(screen.getByLabelText("名"), { target: { value: "花子" } });
       fireEvent.click(screen.getByRole("button", { name: "追加" }));
-      expect(person("I2")).toMatchObject({ surname: "山田", givenName: "一郎", sex: "U" });
-      expect(family("F1")).toMatchObject({ husband: { id: "I2" } });
+      expect(person("I3")).toMatchObject({ surname: "山田", givenName: "花子", sex: "F" });
+      expect(family("F1")).toMatchObject({ husband: { id: "I3" }, wife: { id: "I2" } });
     });
   });
 

@@ -97,7 +97,7 @@ class Block {
   readonly descents: LayoutLine[] = [];
   readonly links: Link[] = [];
 
-  constructor(private readonly centerId: string) {}
+  constructor(private readonly centerId: string | undefined) {}
 
   addNode(individual: Individual, x: number, y: number, generation: number): LayoutNode {
     const node: LayoutNode = {
@@ -215,7 +215,7 @@ class LayoutBuilder {
 
   constructor(
     private readonly tree: FamilyTree,
-    private readonly centerId: string,
+    private readonly centerId: string | undefined,
   ) {
     this.individuals = new Map(tree.individuals.map((i) => [i.id, i]));
     this.families = new Map(tree.families.map((f) => [f.id, f]));
@@ -458,11 +458,11 @@ class LayoutBuilder {
 }
 
 /**
- * 家系図全体のレイアウトを計算する。配置は中心人物に依存せず、centerId は強調表示の対象にのみ使う。
+ * 家系図全体のレイアウトを計算する。配置は選択中の人物に依存せず、centerId(未選択なら undefined)は強調表示の対象にのみ使う。
  * 座標は任意の原点(描画側で中心ノードを画面中央に寄せる)
  */
-export const computeLayout = (tree: FamilyTree, centerId: string): TreeLayout => {
-  if (!tree.individuals.some((i) => i.id === centerId)) return { nodes: [], marriages: [], descents: [] };
+export const computeLayout = (tree: FamilyTree, centerId: string | undefined): TreeLayout => {
+  if (tree.individuals.length === 0) return { nodes: [], marriages: [], descents: [] };
   const builder = new LayoutBuilder(tree, centerId);
   builder.build();
   return builder.result();

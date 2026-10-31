@@ -6,15 +6,13 @@ import type { FamilyTree } from "@kakeizu/gedcom";
  */
 export type ExportTarget = {
   tree: FamilyTree;
-  /** 選択中の人物(画像出力では強調しない)。INDI が0件の場合は undefined */
-  centerId: string | undefined;
 };
 
 export type ExportFormat = "ged" | "png" | "pdf";
 
 /** 画像系(PNG/PDF)は描く人物がいる場合のみ出力できる */
 export const canExport = (format: ExportFormat, target: ExportTarget): boolean =>
-  format === "ged" || (!!target.centerId && target.tree.individuals.some((i) => i.id === target.centerId));
+  format === "ged" || target.tree.individuals.length > 0;
 
 const pad = (value: number) => String(value).padStart(2, "0");
 

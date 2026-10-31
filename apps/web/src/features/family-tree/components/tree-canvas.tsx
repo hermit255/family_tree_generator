@@ -22,12 +22,15 @@ export type Viewport = { x: number; y: number; scale: number };
 
 type Props = {
   layout: TreeLayout;
-  centerId: string;
+  /** 選択中の人物。未選択なら undefined */
+  centerId: string | undefined;
   width: number;
   height: number;
   /** 中心ノードを寄せる領域の高さ(下部シートで隠れる分を除く)。省略時は height */
   focusHeight?: number;
   onSelect: (id: string) => void;
+  /** ノードの無い場所をクリック/タップした */
+  onDeselect: () => void;
   onViewportChange?: (viewport: Viewport) => void;
 };
 
@@ -71,6 +74,7 @@ export default function TreeCanvas({
   height,
   focusHeight = height,
   onSelect,
+  onDeselect,
   onViewportChange,
 }: Props) {
   const stageRef = useRef<Konva.Stage>(null);
@@ -85,7 +89,7 @@ export default function TreeCanvas({
     if (stage) notifyRef.current?.({ x: stage.x(), y: stage.y(), scale: stage.scaleX() });
   };
 
-  // 中心ノードを表示領域の中央へ移動する
+  // 中心ノードを表示領域の中央へ移動する。未選択なら表示位置を保つ
   useEffect(() => {
     const stage = stageRef.current;
     const center = layout.nodes.find((n) => n.isCenter);
@@ -99,6 +103,11 @@ export default function TreeCanvas({
       onFinish: notify,
     });
   }, [layout, centerId, width, focusHeight]);
+
+  // ステージ自体(ノード・線の無い場所)へのクリックのみ選択解除とする
+  const handleBackgroundClick = (event: KonvaEventObject<MouseEvent | TouchEvent>) => {
+    if (event.target === event.target.getStage()) onDeselect();
+  };
 
   const handleWheel = (event: KonvaEventObject<WheelEvent>) => {
     event.evt.preventDefault();
@@ -139,6 +148,8 @@ export default function TreeCanvas({
       draggable
       dragDistance={4}
       onWheel={handleWheel}
+      onClick={handleBackgroundClick}
+      onTap={handleBackgroundClick}
       onDragMove={notify}
       onTouchMove={handleTouchMove}
       onTouchEnd={() => {

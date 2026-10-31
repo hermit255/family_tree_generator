@@ -7,13 +7,12 @@ const empty = { ...tree, individuals: [] };
 
 describe("canExport", () => {
   it(".ged は人物が0件でも出力できる", () => {
-    expect(canExport("ged", { tree: empty, centerId: undefined })).toBe(true);
+    expect(canExport("ged", { tree: empty })).toBe(true);
   });
 
-  it.each(["png", "pdf"] as const)("%s は中心人物が存在する場合のみ出力できる", (format) => {
-    expect(canExport(format, { tree, centerId: "I1" })).toBe(true);
-    expect(canExport(format, { tree, centerId: "I9" })).toBe(false);
-    expect(canExport(format, { tree: empty, centerId: undefined })).toBe(false);
+  it.each(["png", "pdf"] as const)("%s は人物が1人以上いる場合のみ出力できる", (format) => {
+    expect(canExport(format, { tree })).toBe(true);
+    expect(canExport(format, { tree: empty })).toBe(false);
   });
 });
 
