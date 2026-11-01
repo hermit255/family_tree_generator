@@ -1,4 +1,4 @@
-import { findRootId, type Family, type FamilyTree, type Individual, type Sex } from "@kakeizu/gedcom";
+import { findRootId, linkPedigree, type Family, type FamilyTree, type Individual, type Sex } from "@kakeizu/gedcom";
 
 export const NODE_WIDTH = 132;
 export const NODE_HEIGHT = 48;
@@ -30,8 +30,8 @@ export type LayoutNode = {
   isCenter: boolean;
 };
 
-/** Konva の Line に渡す [x1, y1, x2, y2, ...] */
-export type LayoutLine = { points: number[] };
+/** Konva の Line に渡す [x1, y1, x2, y2, ...]。adopted は養親子(普通養子)の線(破線で描画する) */
+export type LayoutLine = { points: number[]; adopted?: boolean };
 
 export type TreeLayout = {
   nodes: LayoutNode[];
@@ -67,6 +67,9 @@ type Marriage = {
   linkedChildren: Individual[];
 };
 
+/** 親の家族と子の関係。structural は配置に使う親子、linked は線だけ引く親子、hidden は線も引かない親子 */
+type ChildRelation = { kind: "structural" | "linked" | "hidden"; adopted: boolean };
+
 /** 子孫ツリーの単位(本人・横に並べる配偶者・その下の子孫) */
 type Unit = {
   person: Individual;
@@ -80,7 +83,7 @@ type Unit = {
 
 /** 端点が別のブロックにある線。全体の配置後に引く */
 type Link =
-  | { kind: "descent"; anchor: Point; childId: string }
+  | { kind: "descent"; anchor: Point; childId: string; adopted: boolean }
   | { kind: "marriage"; personId: string; partnerId: string; personIsHusband: boolean };
 
 /** 子を並べる順(左→右)。配偶者の並びに合わせ、相手を横に置かない家族は配偶者と反対側に置く */
@@ -97,7 +100,10 @@ class Block {
   readonly descents: LayoutLine[] = [];
   readonly links: Link[] = [];
 
-  constructor(private readonly centerId: string | undefined) {}
+  constructor(
+    private readonly centerId: string | undefined,
+    private readonly isAdopted: (family: Family, childId: string) => boolean,
+  ) {}
 
   addNode(individual: Individual, x: number, y: number, generation: number): LayoutNode {
     const node: LayoutNode = {
@@ -153,11 +159,18 @@ class Block {
         childLeft += child.width + GAP_X;
         return node;
       });
-      addDescent(this.descents, anchor, childNodes, index * BUS_STEP);
-      for (const child of marriage.linkedChildren) {
-        this.links.push({ kind: "descent", anchor, childId: child.id });
-      }
       const { linkedPartner, family } = marriage;
+      const adopted = childNodes.map((node) => this.isAdopted(family, node.id));
+      addDescent(this.descents, anchor, childNodes, index * BUS_STEP, adopted);
+      // 起点はブロックの平行移動で線ごとに動かすため、線ごとに複製する
+      for (const child of marriage.linkedChildren) {
+        this.links.push({
+          kind: "descent",
+          anchor: { ...anchor },
+          childId: child.id,
+          adopted: this.isAdopted(family, child.id),
+        });
+      }
       if (linkedPartner && linkedPartner.id !== unit.person.id) {
         this.links.push({
           kind: "marriage",
@@ -181,18 +194,28 @@ class Block {
   }
 }
 
-/** 親(anchor)から子の上端へ、行間のバスを経由する直角の線を引く */
-const addDescent = (descents: LayoutLine[], anchor: Point, children: LayoutNode[], busOffset: number): void => {
+/**
+ * 親(anchor)から子の上端へ、行間のバスを経由する直角の線を引く。
+ * adopted[i] は children[i] が養子か。子への縦線は子ごとに、共有する部分は全員が養子の場合に養親子の線とする
+ */
+const addDescent = (
+  descents: LayoutLine[],
+  anchor: Point,
+  children: LayoutNode[],
+  busOffset: number,
+  adopted: boolean[],
+): void => {
   if (children.length === 0) return;
   const busY = children[0]!.y - GENERATION_GAP / 2 + busOffset;
   const xs = children.map(centerX);
   const left = Math.min(anchor.x, ...xs);
   const right = Math.max(anchor.x, ...xs);
-  descents.push({ points: [anchor.x, anchor.y, anchor.x, busY] });
-  descents.push({ points: [left, busY, right, busY] });
-  for (const x of xs) {
-    descents.push({ points: [x, busY, x, children[0]!.y] });
-  }
+  const shared = adopted.every(Boolean);
+  descents.push({ points: [anchor.x, anchor.y, anchor.x, busY], adopted: shared });
+  descents.push({ points: [left, busY, right, busY], adopted: shared });
+  xs.forEach((x, index) => {
+    descents.push({ points: [x, busY, x, children[0]!.y], adopted: adopted[index]! });
+  });
 };
 
 /** レイアウト計算中の参照・出力をまとめたもの */
@@ -212,6 +235,8 @@ class LayoutBuilder {
   /** 行(y)ごとの配置済みノードの横の範囲 */
   private readonly occupied = new Map<number, [number, number][]>();
   private readonly links: Link[] = [];
+  /** `${familyId}/${childId}` ごとの親子の関係 */
+  private readonly relations = new Map<string, ChildRelation>();
 
   constructor(
     private readonly tree: FamilyTree,
@@ -219,7 +244,28 @@ class LayoutBuilder {
   ) {
     this.individuals = new Map(tree.individuals.map((i) => [i.id, i]));
     this.families = new Map(tree.families.map((f) => [f.id, f]));
+    for (const individual of tree.individuals) this.classify(individual);
   }
+
+  /**
+   * 子から見た各親の家族との関係を決める。配置に使う家族は、特別養子の家族があればそれ(実親とは線を引かない)、
+   * 無ければ実親の家族、それも無ければ普通養子の家族。配置に使わない普通養子の家族とは線だけ引く
+   */
+  private classify(child: Individual): void {
+    const links = child.familiesAsChild.map((link) => ({ id: link.id, pedigree: linkPedigree(link) }));
+    const has = (pedigree: string) => links.some((l) => l.pedigree === pedigree);
+    const primary = has("special") ? "special" : has("birth") ? "birth" : "adopted";
+    for (const { id, pedigree } of links) {
+      const kind = pedigree === primary ? "structural" : primary === "special" && pedigree === "birth" ? "hidden" : "linked";
+      this.relations.set(`${id}/${child.id}`, { kind, adopted: pedigree === "adopted" });
+    }
+  }
+
+  private relation(family: Family, childId: string): ChildRelation {
+    return this.relations.get(`${family.id}/${childId}`) ?? { kind: "structural", adopted: false };
+  }
+
+  readonly isAdopted = (family: Family, childId: string): boolean => this.relation(family, childId).adopted;
 
   result(): TreeLayout {
     return { nodes: this.nodes, marriages: this.marriages, descents: this.descents };
@@ -237,12 +283,23 @@ class LayoutBuilder {
     return [family.husband, family.wife].flatMap((link) => this.individual(link?.id) ?? []);
   }
 
-  private childrenOf(family: Family): Individual[] {
-    return family.children.flatMap((link) => this.individual(link.id) ?? []);
+  /** 家族の子のうち、関係が kind のもの(既定は配置に使う子) */
+  private childrenOf(family: Family, kind: ChildRelation["kind"] = "structural"): Individual[] {
+    return family.children.flatMap((link) => {
+      const child = this.individual(link.id);
+      return child && this.relation(family, child.id).kind === kind ? [child] : [];
+    });
+  }
+
+  /** 配置に使う親の家族 */
+  private parentFamiliesOf(individual: Individual): Family[] {
+    return this.familiesOf(individual.familiesAsChild).filter(
+      (family) => this.relation(family, individual.id).kind === "structural",
+    );
   }
 
   private hasParents(individual: Individual): boolean {
-    return this.familiesOf(individual.familiesAsChild).some((f) => this.parentsOf(f).length > 0);
+    return this.parentFamiliesOf(individual).some((f) => this.parentsOf(f).length > 0);
   }
 
   /** 起点ノードから父(いなければ母)をたどった最上位の祖先。家系図の主軸とする */
@@ -251,36 +308,54 @@ class LayoutBuilder {
     let current = start;
     while (!seen.has(current.id)) {
       seen.add(current.id);
-      const family = this.familiesOf(current.familiesAsChild).find((f) => this.parentsOf(f).length > 0);
+      const family = this.parentFamiliesOf(current).find((f) => this.parentsOf(f).length > 0);
       if (!family) break;
       current = this.parentsOf(family).at(0)!;
     }
     return current;
   }
 
-  /** つながりをたどり、親 -1・子 +1・配偶者と兄弟姉妹は同じ世代とする(矛盾する場合は先に決まった値) */
+  /**
+   * つながりをたどり、親 -1・子 +1・配偶者と兄弟姉妹は同じ世代とする(矛盾する場合は先に決まった値)。
+   * 線だけ引く養親子のつながりは、配置に使うつながりをたどり尽くしてからたどる(孫養子は実親の子の世代になる)
+   */
   private computeGenerations(order: Individual[]): void {
     for (const start of order) {
       if (this.generations.has(start.id)) continue;
       this.generations.set(start.id, 0);
       const queue = [start];
-      for (let i = 0; i < queue.length; i++) {
-        const person = queue[i]!;
+      const deferred: [Individual, number][] = [];
+      const visit = (individuals: Individual[], value: number) => {
+        for (const individual of individuals) {
+          if (this.generations.has(individual.id)) continue;
+          this.generations.set(individual.id, value);
+          queue.push(individual);
+        }
+      };
+      for (let i = 0; ; ) {
+        if (i === queue.length) {
+          const next = deferred.shift();
+          if (!next) break;
+          visit([next[0]], next[1]);
+          continue;
+        }
+        const person = queue[i++]!;
         const generation = this.generations.get(person.id)!;
-        const visit = (individuals: Individual[], value: number) => {
-          for (const individual of individuals) {
-            if (this.generations.has(individual.id)) continue;
-            this.generations.set(individual.id, value);
-            queue.push(individual);
-          }
-        };
         for (const family of this.familiesOf(person.familiesAsChild)) {
-          visit(this.parentsOf(family), generation - 1);
+          const kind = this.relation(family, person.id).kind;
+          if (kind === "hidden") continue;
+          const parents = this.parentsOf(family).map((p): [Individual, number] => [p, generation - 1]);
+          if (kind === "linked") {
+            deferred.push(...parents);
+            continue;
+          }
+          visit(parents.map(([p]) => p), generation - 1);
           visit(this.childrenOf(family), generation);
         }
         for (const family of this.familiesOf(person.familiesAsSpouse)) {
           visit(this.parentsOf(family), generation);
           visit(this.childrenOf(family), generation + 1);
+          deferred.push(...this.childrenOf(family, "linked").map((c): [Individual, number] => [c, generation + 1]));
         }
       }
     }
@@ -309,6 +384,7 @@ class LayoutBuilder {
         if (this.claimed.has(child.id)) marriage.linkedChildren.push(child);
         else marriage.children.push(this.buildUnit(child, generation + 1));
       }
+      marriage.linkedChildren.push(...this.childrenOf(marriage.family, "linked"));
     }
     const unit: Unit = { person, generation, side: first?.husband?.id === person.id ? -1 : 1, marriages, width: 0 };
     const spouseCount = marriages.filter((m) => m.partner).length;
@@ -319,7 +395,7 @@ class LayoutBuilder {
 
   /** root を起点とするブロックを組み、既存のノードと重ならない位置に置く */
   addBlock(root: Individual): void {
-    const block = new Block(this.centerId);
+    const block = new Block(this.centerId, this.isAdopted);
     const generation = this.generations.get(root.id)!;
     // 親が配置済みで親の家族が未処理の場合(配偶者として並べた人の別の家族の子など)は、その家族の子を並べて親から線を引く
     const parents = this.placedParentsOf(root);
@@ -352,8 +428,13 @@ class LayoutBuilder {
     this.descents.push(...block.descents);
     this.links.push(...block.links);
     if (parents) {
-      addDescent(this.descents, parents.anchor, memberNodes, -BUS_STEP);
+      const { family, anchor } = parents;
+      const adopted = memberNodes.map((node) => this.isAdopted(family, node.id));
+      addDescent(this.descents, anchor, memberNodes, -BUS_STEP, adopted);
       if (parents.marriage) this.links.push(parents.marriage);
+      for (const child of this.childrenOf(family, "linked")) {
+        this.links.push({ kind: "descent", anchor, childId: child.id, adopted: this.isAdopted(family, child.id) });
+      }
     }
   }
 
@@ -376,22 +457,50 @@ class LayoutBuilder {
 
   /** 親が配置済みの最初の親の家族と、子への線の起点。両親とも同じ行にいれば婚姻線も引く */
   private placedParentsOf(root: Individual): { family: Family; anchor: Point; marriage?: Link } | undefined {
-    for (const family of this.familiesOf(root.familiesAsChild)) {
-      const husband = this.positions.get(family.husband?.id ?? "");
-      const wife = this.positions.get(family.wife?.id ?? "");
-      if (!husband && !wife) continue;
+    for (const family of this.parentFamiliesOf(root)) {
+      const placed = this.placedAnchor(family);
+      if (!placed) continue;
       this.visitedFamilies.add(family.id);
-      if (husband && wife && husband.y === wife.y) {
-        return {
-          family,
-          anchor: { x: (centerX(husband) + centerX(wife)) / 2, y: husband.y + NODE_HEIGHT / 2 },
-          marriage: { kind: "marriage", personId: husband.id, partnerId: wife.id, personIsHusband: true },
-        };
-      }
-      const parent = (husband ?? wife)!;
-      return { family, anchor: { x: centerX(parent), y: parent.y + NODE_HEIGHT } };
+      return { family, ...placed };
     }
     return undefined;
+  }
+
+  /** 配置済みの親から子への線の起点。両親とも同じ行にいれば両親の間から引き、婚姻線も返す */
+  private placedAnchor(family: Family): { anchor: Point; marriage?: Link } | undefined {
+    const husband = this.positions.get(family.husband?.id ?? "");
+    const wife = this.positions.get(family.wife?.id ?? "");
+    if (husband && wife && husband.y === wife.y) {
+      return {
+        anchor: { x: (centerX(husband) + centerX(wife)) / 2, y: husband.y + NODE_HEIGHT / 2 },
+        marriage: { kind: "marriage", personId: husband.id, partnerId: wife.id, personIsHusband: true },
+      };
+    }
+    const parent = husband ?? wife;
+    return parent && { anchor: { x: centerX(parent), y: parent.y + NODE_HEIGHT } };
+  }
+
+  /**
+   * 線を引く担当が決まらなかった家族(配偶者として並べた人の、子が全員別の位置にいる家族など)の線を引く。
+   * 子はそれぞれ別の位置にいるため、子ごとに線を引く
+   */
+  private resolveUnvisitedFamilies(): void {
+    for (const family of this.tree.families) {
+      if (this.visitedFamilies.has(family.id)) continue;
+      const placed = this.placedAnchor(family);
+      if (!placed) continue;
+      if (placed.marriage) this.links.push(placed.marriage);
+      for (const kind of ["structural", "linked"] as const) {
+        for (const child of this.childrenOf(family, kind)) {
+          this.links.push({
+            kind: "descent",
+            anchor: placed.anchor,
+            childId: child.id,
+            adopted: this.isAdopted(family, child.id),
+          });
+        }
+      }
+    }
   }
 
   private rightEdge(): number {
@@ -423,9 +532,10 @@ class LayoutBuilder {
 
   /** ブロックをまたぐ線を引く(全員の配置後) */
   resolveLinks(): void {
+    this.resolveUnvisitedFamilies();
     for (const link of this.links) {
       if (link.kind === "descent") {
-        addDescent(this.descents, link.anchor, [this.positions.get(link.childId)!], -BUS_STEP);
+        addDescent(this.descents, link.anchor, [this.positions.get(link.childId)!], -BUS_STEP, [link.adopted]);
         continue;
       }
       const [left, right] = [this.positions.get(link.personId)!, this.positions.get(link.partnerId)!].sort(

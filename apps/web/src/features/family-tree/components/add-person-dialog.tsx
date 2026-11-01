@@ -8,55 +8,26 @@ import {
   type PersonInput,
   type Sex,
 } from "@kakeizu/gedcom";
-import { useId, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Field, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { displayName } from "../layout";
 import { spouseFamiliesOf } from "../relations";
 import { useFamilyTreeStore, type ActionResult } from "../store";
+import { AdoptionForm } from "./adoption-form";
+import { ChoiceField } from "./choice-field";
+import { PARENT_SEX_OPTIONS, ROLE_BY_SEX } from "./parent-roles";
 import { PersonForm } from "./person-form";
 
 export type AddMode =
   | { kind: "first" }
   | { kind: "parent"; childId: string }
   | { kind: "spouse"; personId: string }
-  | { kind: "child"; parentId: string };
+  | { kind: "child"; parentId: string }
+  | { kind: "adoption"; childId: string };
 
 const PARENT_LABELS: Record<ParentRole, string> = { father: "父", mother: "母" };
 const NO_SPOUSE = "none";
-
-type Option = { value: string; label: string };
-
-function ChoiceField({
-  legend,
-  options,
-  value,
-  onChange,
-}: {
-  legend: string;
-  options: Option[];
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  const id = useId();
-  return (
-    <FieldSet>
-      <FieldLegend variant="label">{legend}</FieldLegend>
-      <RadioGroup value={value} onValueChange={(v) => onChange(v as string)} className="flex flex-wrap gap-4">
-        {options.map((option) => (
-          <Field key={option.value} orientation="horizontal" className="w-auto">
-            <RadioGroupItem value={option.value} id={`${id}-${option.value}`} />
-            <FieldLabel htmlFor={`${id}-${option.value}`} className="font-normal">
-              {option.label}
-            </FieldLabel>
-          </Field>
-        ))}
-      </RadioGroup>
-    </FieldSet>
-  );
-}
 
 const nameOf = (tree: FamilyTree, id: string) => {
   const person = tree.individuals.find((i) => i.id === id);
@@ -72,10 +43,6 @@ const inheritedSurname = (mode: AddMode, tree: FamilyTree): string | undefined =
 /** 配偶者の追加では選択中の人物と異なる性を初期値にする(男女以外は不明) */
 const OPPOSITE_SEX: Partial<Record<Sex, Sex>> = { M: "F", F: "M" };
 
-/** 親の性別は男女から必須で選ぶ。父母とも追加できる場合は性別で続柄を決める */
-const PARENT_SEX_OPTIONS: Sex[] = ["M", "F"];
-const ROLE_BY_SEX: Partial<Record<Sex, ParentRole>> = { M: "father", F: "mother" };
-
 /** 性別の初期値。続柄が決まっている親はその既定値、配偶者は選択中の人物と異なる性 */
 const defaultSex = (mode: AddMode, tree: FamilyTree, role: ParentRole | undefined): Sex | undefined => {
   if (role) return PARENT_DEFAULT_SEX[role];
@@ -84,7 +51,9 @@ const defaultSex = (mode: AddMode, tree: FamilyTree, role: ParentRole | undefine
   return sex && OPPOSITE_SEX[sex];
 };
 
-function AddPersonForm({ mode, tree, onDone }: { mode: AddMode; tree: FamilyTree; onDone: () => void }) {
+type PersonMode = Exclude<AddMode, { kind: "adoption" }>;
+
+function AddPersonForm({ mode, tree, onDone }: { mode: PersonMode; tree: FamilyTree; onDone: () => void }) {
   const actions = useFamilyTreeStore.getState();
   const roles = mode.kind === "parent" ? availableParentRoles(tree, mode.childId) : [];
   // 追加できる続柄が1つならそれに決まる。2つなら入力された性別で決める
@@ -155,6 +124,8 @@ const titleOf = (mode: AddMode, tree: FamilyTree): { title: string; description?
       return { title: "配偶者を追加", description: `${nameOf(tree, mode.personId)} の配偶者(新しい家族として追加します)` };
     case "child":
       return { title: "子を追加", description: `${nameOf(tree, mode.parentId)} の子` };
+    case "adoption":
+      return { title: "養子縁組", description: `${nameOf(tree, mode.childId)} の養親` };
   }
 };
 
@@ -178,7 +149,13 @@ export function AddPersonDialog({ mode, onClose }: { mode: AddMode | null; onClo
             {heading.description && <DialogDescription>{heading.description}</DialogDescription>}
           </DialogHeader>
         )}
-        {current && tree && <AddPersonForm key={current.key} mode={current.mode} tree={tree} onDone={onClose} />}
+        {current &&
+          tree &&
+          (current.mode.kind === "adoption" ? (
+            <AdoptionForm key={current.key} childId={current.mode.childId} tree={tree} onDone={onClose} />
+          ) : (
+            <AddPersonForm key={current.key} mode={current.mode} tree={tree} onDone={onClose} />
+          ))}
       </DialogContent>
     </Dialog>
   );

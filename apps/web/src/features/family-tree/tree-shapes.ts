@@ -47,11 +47,21 @@ export const personShapes = (node: LayoutNode, highlightCenter: boolean): { rect
   };
 };
 
+/** 養親子(普通養子)の線の破線パターン */
+export const ADOPTION_DASH = [6, 4];
+/** 凡例の文言。養親子の線がある場合に、画面と画像に添える */
+export const ADOPTION_LEGEND = "破線: 養子(養親子)";
+
+/** 親子線。養親子は破線 */
 export const descentShape = (line: LayoutLine): LineConfig => ({
   points: line.points,
   stroke: COLORS.line,
   strokeWidth: 1.5,
+  ...(line.adopted ? { dash: ADOPTION_DASH } : {}),
 });
+
+/** 凡例を添えるか(養親子の線があるか) */
+export const hasAdoption = (layout: TreeLayout): boolean => layout.descents.some((line) => line.adopted);
 
 /** 二重線: 太い線の上に背景色の細い線を重ねる */
 export const marriageShapes = (line: LayoutLine): [LineConfig, LineConfig] => [

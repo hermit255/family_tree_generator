@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { NODE_HEIGHT, NODE_WIDTH, type LayoutNode } from "./layout";
-import { COLORS, descentShape, layoutBounds, marriageShapes, personShapes } from "./tree-shapes";
+import {
+  ADOPTION_DASH,
+  COLORS,
+  descentShape,
+  hasAdoption,
+  layoutBounds,
+  marriageShapes,
+  personShapes,
+} from "./tree-shapes";
 
 const node = (overrides: Partial<LayoutNode> = {}): LayoutNode => ({
   id: "I1",
@@ -45,8 +53,22 @@ describe("線", () => {
     expect(outer.strokeWidth!).toBeGreaterThan(inner.strokeWidth!);
   });
 
-  it("親子線は1本の線", () => {
-    expect(descentShape({ points: [0, 0, 0, 10] })).toMatchObject({ points: [0, 0, 0, 10], stroke: COLORS.line });
+  it("親子線は1本の実線", () => {
+    const shape = descentShape({ points: [0, 0, 0, 10] });
+    expect(shape).toMatchObject({ points: [0, 0, 0, 10], stroke: COLORS.line });
+    expect(shape.dash).toBeUndefined();
+  });
+
+  it("養親子の親子線は破線", () => {
+    expect(descentShape({ points: [0, 0, 0, 10], adopted: true })).toMatchObject({ dash: ADOPTION_DASH });
+  });
+});
+
+describe("hasAdoption", () => {
+  it("養親子の線があれば true", () => {
+    const layout = { nodes: [], marriages: [], descents: [{ points: [] }, { points: [], adopted: true }] };
+    expect(hasAdoption(layout)).toBe(true);
+    expect(hasAdoption({ ...layout, descents: [{ points: [], adopted: false }] })).toBe(false);
   });
 });
 

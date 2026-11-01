@@ -1,6 +1,13 @@
 "use client";
 
-import { canDeleteIndividual, type Individual, type PersonInput } from "@kakeizu/gedcom";
+import {
+  canDeleteIndividual,
+  linkPedigree,
+  type FamilyTree,
+  type Individual,
+  type Pedigree,
+  type PersonInput,
+} from "@kakeizu/gedcom";
 import { XIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -18,6 +25,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { displayName } from "../layout";
+import { parentNamesOf } from "../relations";
 import { useFamilyTreeStore } from "../store";
 import { PersonForm, SEX_LABELS } from "./person-form";
 
@@ -58,18 +66,38 @@ function DeleteSection({ person }: { person: Individual }) {
   );
 }
 
+/** 養親との続柄の注記。普通養子は戸籍にならい養子・養女、特別養子は種類を示す */
+const adoptionNote = (pedigree: Pedigree, person: Individual): string => {
+  if (pedigree === "special") return "(特別養子)";
+  if (pedigree === "adopted") return person.sex === "F" ? "(養女)" : "(養子)";
+  return "";
+};
+
+/** 親の家族ごとの行(実親・養親)。親のいない家族は除く */
+const parentRows = (tree: FamilyTree, person: Individual): [string, string][] =>
+  person.familiesAsChild.flatMap((link): [string, string][] => {
+    const family = tree.families.find((f) => f.id === link.id);
+    const names = family ? parentNamesOf(tree, family) : "";
+    if (!names) return [];
+    const pedigree = linkPedigree(link);
+    return [[pedigree === "birth" ? "実親" : "養親", `${names}${adoptionNote(pedigree, person)}`]];
+  });
+
 function PersonView({ person, onEdit }: { person: Individual; onEdit: () => void }) {
+  const tree = useFamilyTreeStore((s) => s.tree)!;
   const rows: [string, string][] = [
     ["姓", person.surname || "-"],
     ["名", person.givenName || "-"],
     ["性別", person.sex ? SEX_LABELS[person.sex] : "-"],
+    ...parentRows(tree, person),
     ["ID", person.id],
   ];
   return (
     <div className="flex flex-col gap-4">
       <dl className="grid grid-cols-[4rem_1fr] gap-y-2 text-sm">
-        {rows.map(([label, value]) => (
-          <div key={label} className="contents">
+        {rows.map(([label, value], index) => (
+          // 実親・養親は複数行になり得るため、行の位置を key にする
+          <div key={index} className="contents">
             <dt className="text-muted-foreground">{label}</dt>
             <dd>{value}</dd>
           </div>

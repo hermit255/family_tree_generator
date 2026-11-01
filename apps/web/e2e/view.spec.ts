@@ -22,7 +22,7 @@ test.describe("家系図の表示", () => {
 
     await expect(detailPanel(page).getByRole("heading", { name: "山田 健一" })).toBeVisible();
     await expect(detailPanel(page)).toContainText("男性");
-    await expect(nodeMenu(page).getByRole("button")).toHaveText(["配偶者を追加", "子を追加"]);
+    await expect(nodeMenu(page).getByRole("button")).toHaveText(["配偶者を追加", "子を追加", "養子縁組"]);
 
     await closeDetail(page);
     await expect(nodeMenu(page)).toBeHidden();

@@ -43,6 +43,9 @@ export function NodeMenu({
       <Button size="sm" variant="outline" onClick={() => onAdd({ kind: "child", parentId: node.id })}>
         子を追加
       </Button>
+      <Button size="sm" variant="outline" onClick={() => onAdd({ kind: "adoption", childId: node.id })}>
+        養子縁組
+      </Button>
     </nav>
   );
 }

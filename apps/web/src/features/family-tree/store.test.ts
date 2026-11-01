@@ -112,6 +112,21 @@ describe("追加・更新・削除", () => {
     expect(importGedcom(exportGedcom(store().tree!)).warnings).toEqual([]);
   });
 
+  it("addAdoptiveParent / adoptInto は養子縁組を記録し、保存する", () => {
+    expect(store().addSpouse("I1", { givenName: "後妻" })).toMatchObject({ ok: true, value: "I3" });
+    expect(store().addChild("I1", "F1", { givenName: "一郎" })).toMatchObject({ ok: true, value: "I4" });
+    // 連れ子の縁組: 一郎(F1 の子)を後妻との家族 F2 の養子にする
+    expect(store().adoptInto("I4", "F2", "adopted")).toEqual({ ok: true, value: undefined });
+    expect(store().addAdoptiveParent("I2", { kind: "special" }, "father", { givenName: "養父" })).toEqual({
+      ok: true,
+      value: "I5",
+    });
+    const tree = stored()!;
+    expect(tree.individuals.find((i) => i.id === "I4")?.familiesAsChild.map((l) => l.id)).toEqual(["F1", "F2"]);
+    expect(tree.families.find((f) => f.id === "F3")).toMatchObject({ husband: { id: "I5" }, children: [{ id: "I2" }] });
+    expect(store().adoptInto("I4", "F2", "adopted")).toEqual({ ok: false, error: "I4 は家族 F2 の養子にできません" });
+  });
+
   it("update は保存データにも反映する", () => {
     expect(store().update("I2", { givenName: "花子", surname: "山田", sex: "F" }).ok).toBe(true);
     expect(stored()?.individuals[1]).toMatchObject({ givenName: "花子", surname: "山田" });
@@ -169,8 +184,9 @@ describe("データが空の状態", () => {
     expect(store().centerId).toBeUndefined();
   });
 
-  it("tree が null のままの更新・削除はエラーを返す", () => {
+  it("tree が null のままの更新・削除・縁組はエラーを返す", () => {
     expect(store().update("I1", { givenName: "a" })).toEqual({ ok: false, error: "人物 I1 が存在しません" });
+    expect(store().adoptInto("I1", "F1", "adopted")).toEqual({ ok: false, error: "家族 F1 が存在しません" });
     expect(store().remove("I1")).toEqual({ ok: false, error: "人物 I1 が存在しません" });
   });
 });

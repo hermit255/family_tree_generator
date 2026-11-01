@@ -4,11 +4,13 @@ import dynamic from "next/dynamic";
 import { useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { computeLayout } from "../layout";
+import { hasAdoption } from "../tree-shapes";
 import { useFamilyTreeStore } from "../store";
 import { useElementSize } from "../use-element-size";
 import type { AddMode } from "./add-person-dialog";
 import { NodeMenu } from "./node-menu";
 import { PersonList } from "./person-list";
+import { TreeLegend } from "./tree-legend";
 import type { Viewport } from "./tree-canvas";
 
 // Konva はブラウザの canvas を前提とするため SSR しない
@@ -55,6 +57,7 @@ export function FamilyTreeView({ focusRatio, onAdd }: Props) {
           onViewportChange={setViewport}
         />
       )}
+      {layout && hasAdoption(layout) && <TreeLegend />}
       {layout && <PersonList nodes={layout.nodes} onSelect={select} />}
       {detailOpen && center && viewport && <NodeMenu node={center} viewport={viewport} onAdd={onAdd} />}
     </div>

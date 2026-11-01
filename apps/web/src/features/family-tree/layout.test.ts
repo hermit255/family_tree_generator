@@ -5,14 +5,18 @@ import { computeLayout, displayName, GAP_X, NODE_HEIGHT, NODE_WIDTH, type TreeLa
 const treeOf = (...body: string[]) =>
   importGedcom(["0 HEAD", "1 GEDC", "2 VERS 7.0", ...body, "0 TRLR"].join("\n")).tree;
 
-/** "I1 M FAMS:F1 FAMC:F2" 形式で人物を、"F1 HUSB:I1 WIFE:I2 CHIL:I3,I4" 形式で家族を定義する */
+/**
+ * "I1 M FAMS:F1 FAMC:F2" 形式で人物を、"F1 HUSB:I1 WIFE:I2 CHIL:I3,I4" 形式で家族を定義する。
+ * "FAMC:F2:ADOPTED" は普通養子、"FAMC:F2:SPECIAL" は特別養子
+ */
+const PEDI: Record<string, string[]> = { ADOPTED: ["2 PEDI ADOPTED"], SPECIAL: ["2 PEDI ADOPTED", "3 PHRASE 特別養子"] };
 const indi = (id: string, sex: string, ...links: string[]) => [
   `0 @${id}@ INDI`,
   `1 NAME ${id}`,
   `1 SEX ${sex}`,
-  ...links.map((l) => {
-    const [tag, ref] = l.split(":");
-    return `1 ${tag} @${ref}@`;
+  ...links.flatMap((l) => {
+    const [tag, ref, pedi] = l.split(":");
+    return [`1 ${tag} @${ref}@`, ...(pedi ? PEDI[pedi]! : [])];
   }),
 ];
 const fam = (id: string, husband?: string, wife?: string, children: string[] = []) => [
@@ -62,6 +66,13 @@ const descentOriginTo = (layout: TreeLayout, id: string) => {
     ({ points: p }) => isVertical(p) && p[3] === busY && p[1]! < busY! && bus!.points[0]! <= p[0]! && p[0]! <= bus!.points[2]!,
   );
   return rise && { x: rise.points[0]!, y: rise.points[1]! };
+};
+
+/** node の上端に届く子への縦線 */
+const dropsTo = (layout: TreeLayout, id: string) => {
+  const node = nodeOf(layout, id);
+  const x = node.x + NODE_WIDTH / 2;
+  return layout.descents.filter(({ points: p }) => p[0] === x && p[2] === x && p[3] === node.y);
 };
 
 const ids = (layout: TreeLayout) => layout.nodes.map((n) => n.id).sort();
@@ -445,6 +456,212 @@ describe("computeLayout", () => {
     tree.families.push({ id: "F8", husband: { id: "A", extras: [] }, children: [{ id: "X9", extras: [] }], extras: [] });
     tree.individuals[0]!.familiesAsSpouse.push({ id: "F8", extras: [] });
     expect(computeLayout(tree, "A").nodes.map((n) => n.id)).toEqual(["A"]);
+  });
+
+  it("子の側に FAMC が無い CHIL も実子として扱う", () => {
+    const tree = treeOf(...indi("A", "M", "FAMS:F1"), ...indi("B", "M", "FAMC:F1"), ...fam("F1", "A", undefined, ["B"]));
+    tree.individuals[1]!.familiesAsChild = [];
+    const layout = computeLayout(tree, undefined);
+    expect(dropsTo(layout, "B").map((l) => l.adopted)).toEqual([false]);
+  });
+
+  it("別々の人の配偶者同士の子のいない家族も、婚姻線で結ぶ", () => {
+    const layout = computeLayout(
+      treeOf(
+        ...indi("X", "M", "FAMS:FX"),
+        ...indi("P", "F", "FAMS:FX", "FAMS:FPQ"),
+        ...indi("Y", "F", "FAMS:FY"),
+        ...indi("Q", "M", "FAMS:FY", "FAMS:FPQ"),
+        ...indi("K", "M", "FAMC:FX"),
+        ...fam("FX", "X", "P", ["K"]),
+        ...fam("FY", "Q", "Y"),
+        ...fam("FPQ", "Q", "P"),
+      ),
+      undefined,
+    );
+    expectNoOverlap(layout);
+    expect(layout.marriages).toHaveLength(3);
+  });
+});
+
+describe("養子", () => {
+  // 妻 W の両親 WF・WM の家族 FW。夫 H は実親 HF・HM の家族 FH の子で、FW の養子(婿養子)
+  const MUKO = treeOf(
+    ...indi("WF", "M", "FAMS:FW"),
+    ...indi("WM", "F", "FAMS:FW"),
+    ...indi("HF", "M", "FAMS:FH"),
+    ...indi("HM", "F", "FAMS:FH"),
+    ...indi("W", "F", "FAMC:FW", "FAMS:FC"),
+    ...indi("H", "M", "FAMC:FH", "FAMC:FW:ADOPTED", "FAMS:FC"),
+    ...fam("FW", "WF", "WM", ["W", "H"]),
+    ...fam("FH", "HF", "HM", ["H"]),
+    ...fam("FC", "H", "W"),
+  );
+
+  it("婿養子: 実親から実線、養親から破線を引き、本人は妻の横に1回だけ置く", () => {
+    const layout = computeLayout(MUKO, "W");
+    expect(ids(layout)).toEqual(["H", "HF", "HM", "W", "WF", "WM"]);
+    expectNoOverlap(layout);
+    expect(nodeOf(layout, "H").y).toBe(nodeOf(layout, "W").y);
+    expect(nodeOf(layout, "H").x).toBe(nodeOf(layout, "W").x + NODE_WIDTH + 40);
+    expect(dropsTo(layout, "H").map((l) => l.adopted).sort()).toEqual([false, true]);
+    expect(dropsTo(layout, "W").map((l) => l.adopted)).toEqual([false]);
+    // 養親の家族からの線は、子が H だけなので全体を破線にする
+    const adopted = layout.descents.filter((l) => l.adopted);
+    expect(adopted).toHaveLength(3);
+  });
+
+  it("妻の親が別のブロックでも、妻への線と婿養子への破線は妻の親の間から引く", () => {
+    // 主軸は夫 H の実親。妻の親のブロックは、妻・夫の2人へブロックをまたいで線を引く
+    const layout = computeLayout(
+      treeOf(
+        ...indi("HF", "M", "FAMS:FH"),
+        ...indi("HM", "F", "FAMS:FH"),
+        ...indi("H", "M", "FAMC:FH", "FAMC:FW:ADOPTED", "FAMS:FC"),
+        ...indi("W", "F", "FAMC:FW", "FAMS:FC"),
+        ...indi("WF", "M", "FAMS:FW"),
+        ...indi("WM", "F", "FAMS:FW"),
+        ...fam("FH", "HF", "HM", ["H"]),
+        ...fam("FW", "WF", "WM", ["W", "H"]),
+        ...fam("FC", "H", "W"),
+      ),
+      undefined,
+    );
+    expectNoOverlap(layout);
+    const middle = (nodeOf(layout, "WF").x + nodeOf(layout, "WM").x + NODE_WIDTH) / 2;
+    expect(descentOriginTo(layout, "W")?.x).toBe(middle);
+    const adoptedRise = layout.descents.find((l) => l.adopted && l.points[1] === nodeOf(layout, "WF").y + NODE_HEIGHT / 2);
+    expect(adoptedRise?.points[0]).toBe(middle);
+  });
+
+  it("婿養子の縁組だけで実親がいなければ、養親の家族の子として破線で結ぶ", () => {
+    const layout = computeLayout(
+      treeOf(
+        ...indi("WF", "M", "FAMS:FW"),
+        ...indi("W", "F", "FAMC:FW", "FAMS:FC"),
+        ...indi("H", "M", "FAMC:FW:ADOPTED", "FAMS:FC"),
+        ...fam("FW", "WF", undefined, ["W", "H"]),
+        ...fam("FC", "H", "W"),
+      ),
+      undefined,
+    );
+    expect(nodeOf(layout, "H").y).toBe(nodeOf(layout, "W").y);
+    expect(dropsTo(layout, "H").map((l) => l.adopted)).toEqual([true]);
+    expect(dropsTo(layout, "W").map((l) => l.adopted)).toEqual([false]);
+  });
+
+  it("孫養子: 世代は実親の子のまま、祖父母から破線・実親から実線を引く", () => {
+    const layout = computeLayout(
+      treeOf(
+        ...indi("GF", "M", "FAMS:FG"),
+        ...indi("GM", "F", "FAMS:FG"),
+        ...indi("P", "M", "FAMC:FG", "FAMS:FP"),
+        ...indi("PW", "F", "FAMS:FP"),
+        ...indi("K", "M", "FAMC:FP", "FAMC:FG:ADOPTED"),
+        ...fam("FG", "GF", "GM", ["P", "K"]),
+        ...fam("FP", "P", "PW", ["K"]),
+      ),
+      undefined,
+    );
+    expectNoOverlap(layout);
+    expect(nodeOf(layout, "K").y - nodeOf(layout, "P").y).toBe(nodeOf(layout, "P").y - nodeOf(layout, "GF").y);
+    expect(dropsTo(layout, "K").map((l) => l.adopted).sort()).toEqual([false, true]);
+    // 祖父母の家族の線のうち、実子 P と共有するバスは実線
+    expect(dropsTo(layout, "P").map((l) => l.adopted)).toEqual([false]);
+  });
+
+  it("特別養子: 養親の子として実線で結び、実親とは線を引かない", () => {
+    const layout = computeLayout(
+      treeOf(
+        ...indi("BF", "M", "FAMS:FB"),
+        ...indi("BM", "F", "FAMS:FB"),
+        ...indi("AF", "M", "FAMS:FA"),
+        ...indi("AM", "F", "FAMS:FA"),
+        ...indi("C", "M", "FAMC:FB", "FAMC:FA:SPECIAL"),
+        ...fam("FB", "BF", "BM", ["C"]),
+        ...fam("FA", "AF", "AM", ["C"]),
+      ),
+      undefined,
+    );
+    expect(ids(layout)).toEqual(["AF", "AM", "BF", "BM", "C"]);
+    expectNoOverlap(layout);
+    expect(dropsTo(layout, "C").map((l) => l.adopted)).toEqual([false]);
+    const origin = descentOriginTo(layout, "C")!;
+    expect(origin.x).toBe((nodeOf(layout, "AF").x + nodeOf(layout, "AM").x + NODE_WIDTH) / 2);
+    expect(layout.descents.some((l) => l.adopted)).toBe(false);
+  });
+
+  it("実子と養子のいる家族は、共有する線を実線、養子への縦線を破線にする", () => {
+    const layout = computeLayout(
+      treeOf(
+        ...indi("F", "M", "FAMS:FA"),
+        ...indi("M", "F", "FAMS:FA"),
+        ...indi("A", "M", "FAMC:FA"),
+        ...indi("B", "F", "FAMC:FA:ADOPTED"),
+        ...fam("FA", "F", "M", ["A", "B"]),
+      ),
+      undefined,
+    );
+    expect(dropsTo(layout, "A").map((l) => l.adopted)).toEqual([false]);
+    expect(dropsTo(layout, "B").map((l) => l.adopted)).toEqual([true]);
+    expect(layout.descents.filter((l) => l.adopted)).toHaveLength(1);
+  });
+
+  it("子を通じてのみつながる養親は、子の1つ上の行に置いて破線で結ぶ", () => {
+    const layout = computeLayout(
+      treeOf(
+        ...indi("F", "M", "FAMS:FB"),
+        ...indi("C", "M", "FAMC:FB", "FAMC:FA:ADOPTED"),
+        ...indi("AF", "M", "FAMS:FA"),
+        ...indi("AM", "F", "FAMS:FA"),
+        ...fam("FB", "F", undefined, ["C"]),
+        ...fam("FA", "AF", "AM", ["C"]),
+      ),
+      undefined,
+    );
+    expectNoOverlap(layout);
+    expect(nodeOf(layout, "AF").y).toBe(nodeOf(layout, "F").y);
+    expect(dropsTo(layout, "C").map((l) => l.adopted).sort()).toEqual([false, true]);
+  });
+
+  it("配偶者として並べた人の、養子だけの家族からも破線を引く", () => {
+    // X の妻 P は単独で Y の養親(家族 FP)。Y は実親 YF の子
+    const layout = computeLayout(
+      treeOf(
+        ...indi("X", "M", "FAMS:FX"),
+        ...indi("P", "F", "FAMS:FX", "FAMS:FP"),
+        ...indi("YF", "M", "FAMS:FY"),
+        ...indi("Y", "M", "FAMC:FY", "FAMC:FP:ADOPTED"),
+        ...fam("FX", "X", "P"),
+        ...fam("FP", undefined, "P", ["Y"]),
+        ...fam("FY", "YF", undefined, ["Y"]),
+      ),
+      undefined,
+    );
+    expect(dropsTo(layout, "Y").map((l) => l.adopted).sort()).toEqual([false, true]);
+    const p = nodeOf(layout, "P");
+    expect(layout.descents.some(({ points }) => points[0] === p.x + NODE_WIDTH / 2 && points[1] === p.y + NODE_HEIGHT)).toBe(
+      true,
+    );
+  });
+
+  it("配偶者として並べた人の、実子と養子のいる家族は実子を並べ、養子へは破線を引く", () => {
+    const layout = computeLayout(
+      treeOf(
+        ...indi("X", "M", "FAMS:FX"),
+        ...indi("P", "F", "FAMS:FX", "FAMS:FP"),
+        ...indi("Z", "F", "FAMC:FP"),
+        ...indi("YF", "M", "FAMS:FY"),
+        ...indi("Y", "M", "FAMC:FY", "FAMC:FP:ADOPTED"),
+        ...fam("FX", "X", "P"),
+        ...fam("FP", undefined, "P", ["Z", "Y"]),
+        ...fam("FY", "YF", undefined, ["Y"]),
+      ),
+      undefined,
+    );
+    expectNoOverlap(layout);
+    expect(dropsTo(layout, "Z").map((l) => l.adopted)).toEqual([false]);
+    expect(dropsTo(layout, "Y").map((l) => l.adopted).sort()).toEqual([false, true]);
   });
 });
 

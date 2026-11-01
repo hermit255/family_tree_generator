@@ -1,4 +1,5 @@
-import type { FamilyTree, Individual } from "@kakeizu/gedcom";
+import type { Family, FamilyTree, Individual } from "@kakeizu/gedcom";
+import { displayName } from "./layout";
 
 export type SpouseFamily = { familyId: string; partner?: Individual };
 
@@ -12,3 +13,10 @@ export const spouseFamiliesOf = (tree: FamilyTree, id: string): SpouseFamily[] =
     return [{ familyId, partner: tree.individuals.find((i) => i.id === partnerId) }];
   });
 };
+
+/** 家族の親の名前("夫・妻"。片親ならその人のみ) */
+export const parentNamesOf = (tree: FamilyTree, family: Family): string =>
+  [family.husband, family.wife]
+    .flatMap((link) => tree.individuals.find((i) => i.id === link?.id) ?? [])
+    .map(displayName)
+    .join("・");

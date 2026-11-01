@@ -1,4 +1,4 @@
-import type { Family, FamilyTree } from "../model";
+import { linkPedigree, type Family, type FamilyTree, type Individual, type Link } from "../model";
 import { TreeOperationError } from "./errors";
 import { parsePersonInput, type PersonInput } from "./input";
 import {
@@ -92,9 +92,13 @@ export const addChild = (
   return { tree: { ...next, individuals: [...next.individuals, child] }, individualId: childId };
 };
 
-/** 追加可能な親の役割。親の家族が複数ある場合は最初の家族を対象とする */
+/** 実親の家族(最初の実子としての FAMC)。養子縁組の家族は対象外 */
+const birthFamilyLink = (child: Individual): Link | undefined =>
+  child.familiesAsChild.find((l) => linkPedigree(l) === "birth");
+
+/** 追加可能な実親の役割。実親の家族が複数ある場合は最初の家族を対象とする */
 export const availableParentRoles = (tree: FamilyTree, childId: string): ParentRole[] => {
-  const famc = getIndividual(tree, childId).familiesAsChild[0];
+  const famc = birthFamilyLink(getIndividual(tree, childId));
   if (!famc) return ["father", "mother"];
   const family = getFamily(tree, famc.id);
   return (["father", "mother"] as const).filter((role) => family[PARENT_SLOT[role]] === undefined);
@@ -103,18 +107,26 @@ export const availableParentRoles = (tree: FamilyTree, childId: string): ParentR
 /** 親の追加で性別を指定しない場合の既定値 */
 export const PARENT_DEFAULT_SEX: Record<ParentRole, "M" | "F"> = { father: "M", mother: "F" };
 
-/** 親を追加する。父は HUSB、母は WIFE。性別の指定が無ければ父は SEX M、母は SEX F */
-export const addParent = (tree: FamilyTree, childId: string, role: ParentRole, input: PersonInput): AddResult => {
+/**
+ * 親を family の role の枠に追加する。family が無ければ新しい家族を作り、子から childLink で結ぶ。
+ * 実親・養親の追加で共用する
+ */
+export const addParentTo = (
+  tree: FamilyTree,
+  childId: string,
+  family: Family | undefined,
+  role: ParentRole,
+  input: PersonInput,
+  childLink: (familyId: string) => Link,
+): AddResult => {
   const valid = parsePersonInput({ ...input, sex: input.sex ?? PARENT_DEFAULT_SEX[role] });
   const child = getIndividual(tree, childId);
   const slot = PARENT_SLOT[role];
   const parentId = nextId(tree, "I");
-  const famc = child.familiesAsChild[0];
 
   let next: FamilyTree;
   let familyId: string;
-  if (famc) {
-    const family = getFamily(tree, famc.id);
+  if (family) {
     if (family[slot]) {
       throw new TreeOperationError(`${childId} には既に${PARENT_LABEL[role]}がいます`);
     }
@@ -122,10 +134,16 @@ export const addParent = (tree: FamilyTree, childId: string, role: ParentRole, i
     next = replaceFamily(tree, { ...family, [slot]: link(parentId) });
   } else {
     familyId = nextId(tree, "F");
-    const family: Family = { id: familyId, [slot]: link(parentId), children: [link(childId)], extras: [] };
-    next = replaceIndividual(tree, { ...child, familiesAsChild: [link(familyId)] });
-    next = { ...next, families: [...next.families, family] };
+    const created: Family = { id: familyId, [slot]: link(parentId), children: [link(childId)], extras: [] };
+    next = replaceIndividual(tree, { ...child, familiesAsChild: [...child.familiesAsChild, childLink(familyId)] });
+    next = { ...next, families: [...next.families, created] };
   }
   const parent = newIndividual(parentId, valid, { familiesAsSpouse: [link(familyId)] });
   return { tree: { ...next, individuals: [...next.individuals, parent] }, individualId: parentId };
+};
+
+/** 実親を追加する。父は HUSB、母は WIFE。性別の指定が無ければ父は SEX M、母は SEX F */
+export const addParent = (tree: FamilyTree, childId: string, role: ParentRole, input: PersonInput): AddResult => {
+  const famc = birthFamilyLink(getIndividual(tree, childId));
+  return addParentTo(tree, childId, famc && getFamily(tree, famc.id), role, input, link);
 };

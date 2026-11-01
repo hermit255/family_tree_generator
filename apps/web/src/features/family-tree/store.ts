@@ -1,8 +1,10 @@
 import {
+  addAdoptiveParent,
   addChild,
   addFirstIndividual,
   addParent,
   addSpouse,
+  adoptInto,
   deleteIndividual,
   findRootId,
   GedcomImportError,
@@ -11,6 +13,7 @@ import {
   TreeOperationError,
   updateIndividual,
   type AddResult,
+  type AdoptionKind,
   type FamilyTree,
   type ParentRole,
   type PersonInput,
@@ -48,6 +51,15 @@ type FamilyTreeActions = {
   addSpouse: (personId: string, input: PersonInput) => ActionResult<string>;
   addChild: (parentId: string, familyId: string | undefined, input: PersonInput) => ActionResult<string>;
   addParent: (childId: string, role: ParentRole, input: PersonInput) => ActionResult<string>;
+  /** 養親を新しい人物として追加する(養親の枠が空いた家族、または新しい縁組) */
+  addAdoptiveParent: (
+    childId: string,
+    target: { familyId: string } | { kind: AdoptionKind },
+    role: ParentRole,
+    input: PersonInput,
+  ) => ActionResult<string>;
+  /** 既存の家族の養子にする */
+  adoptInto: (childId: string, familyId: string, kind: AdoptionKind) => ActionResult;
   update: (id: string, input: PersonInput) => ActionResult;
   remove: (id: string) => ActionResult;
 };
@@ -118,6 +130,12 @@ export const useFamilyTreeStore = create<FamilyTreeState & FamilyTreeActions>()(
     addSpouse: (personId, input) => applyAdd((tree) => addSpouse(tree, personId, input)),
     addChild: (parentId, familyId, input) => applyAdd((tree) => addChild(tree, parentId, familyId, input)),
     addParent: (childId, role, input) => applyAdd((tree) => addParent(tree, childId, role, input)),
+    addAdoptiveParent: (childId, target, role, input) =>
+      applyAdd((tree) => addAdoptiveParent(tree, childId, target, role, input)),
+    adoptInto: (childId, familyId, kind) =>
+      attempt(() => {
+        set({ tree: adoptInto(get().tree ?? EMPTY_TREE, childId, familyId, kind) });
+      }),
 
     update: (id, input) =>
       attempt(() => {
