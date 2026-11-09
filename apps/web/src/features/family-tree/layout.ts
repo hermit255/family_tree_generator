@@ -1,4 +1,4 @@
-import { findRootId, linkPedigree, type Family, type FamilyTree, type Individual, type Sex } from "@kakeizu/gedcom";
+import { avatarsOf, findRootId, linkPedigree, type Family, type FamilyTree, type Individual, type Sex } from "@kakeizu/gedcom";
 
 export const NODE_WIDTH = 132;
 export const NODE_HEIGHT = 48;
@@ -28,6 +28,8 @@ export type LayoutNode = {
   /** 世代(行)。値が小さいほど上の世代。原点は任意 */
   generation: number;
   isCenter: boolean;
+  /** 写真(data URI)。写真のある人物のみ */
+  avatar?: string;
 };
 
 /** Konva の Line に渡す [x1, y1, x2, y2, ...]。adopted は養親子(普通養子)の線(破線で描画する) */
@@ -575,5 +577,14 @@ export const computeLayout = (tree: FamilyTree, centerId: string | undefined): T
   if (tree.individuals.length === 0) return { nodes: [], marriages: [], descents: [] };
   const builder = new LayoutBuilder(tree, centerId);
   builder.build();
-  return builder.result();
+  const layout = builder.result();
+  const avatars = avatarsOf(tree);
+  if (avatars.size === 0) return layout;
+  return {
+    ...layout,
+    nodes: layout.nodes.map((node) => {
+      const avatar = avatars.get(node.id);
+      return avatar ? { ...node, avatar: avatar.dataUri } : node;
+    }),
+  };
 };

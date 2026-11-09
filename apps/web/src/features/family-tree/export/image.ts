@@ -1,5 +1,6 @@
 import Konva from "konva";
-import { computeLayout } from "../layout";
+import { loadImage } from "../avatar-image";
+import { computeLayout, type TreeLayout } from "../layout";
 import {
   ADOPTION_LEGEND,
   COLORS,
@@ -8,6 +9,7 @@ import {
   layoutBounds,
   marriageShapes,
   personShapes,
+  squareCrop,
 } from "../tree-shapes";
 import type { ExportTarget } from "./target";
 
@@ -22,12 +24,22 @@ const LEGEND_SAMPLE_WIDTH = 32;
 /** 出力画像。width/height は画面の座標系での大きさ(canvas の画素数は PIXEL_RATIO 倍) */
 export type TreeImage = { canvas: HTMLCanvasElement; width: number; height: number };
 
+/** ノードの写真を読み込む。読み込めない写真は描かない */
+const loadAvatars = async (layout: TreeLayout): Promise<Map<string, HTMLImageElement>> => {
+  const sources = [...new Set(layout.nodes.flatMap((n) => (n.avatar ? [n.avatar] : [])))];
+  const loaded = await Promise.all(
+    sources.map((src) => loadImage(src).then((image) => [src, image] as const, () => undefined)),
+  );
+  return new Map(loaded.filter((entry) => entry !== undefined));
+};
+
 /**
  * 家系図全体を、画面のパン・ズームと無関係に描いた canvas を返す。
  * 画像では選択中の人物を強調しない
  */
-export const renderTreeImage = (target: ExportTarget): TreeImage => {
+export const renderTreeImage = async (target: ExportTarget): Promise<TreeImage> => {
   const layout = computeLayout(target.tree, undefined);
+  const avatars = await loadAvatars(layout);
   const bounds = layoutBounds(layout);
   const legend = hasAdoption(layout);
   const width = Math.ceil(bounds.width + PADDING * 2);
@@ -47,7 +59,12 @@ export const renderTreeImage = (target: ExportTarget): TreeImage => {
     for (const node of layout.nodes) {
       const shapes = personShapes(node, false);
       const group = new Konva.Group({ x: node.x, y: node.y });
-      group.add(new Konva.Rect(shapes.rect), new Konva.Text(shapes.text));
+      group.add(new Konva.Rect(shapes.rect));
+      const image = node.avatar && avatars.get(node.avatar);
+      if (image && shapes.avatar) {
+        group.add(new Konva.Image({ ...shapes.avatar, image, crop: squareCrop(image.naturalWidth, image.naturalHeight) }));
+      }
+      group.add(new Konva.Text(shapes.text));
       content.add(group);
     }
     if (legend) {

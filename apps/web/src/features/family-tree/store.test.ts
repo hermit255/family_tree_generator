@@ -1,8 +1,9 @@
-import { exportGedcom, importGedcom } from "@kakeizu/gedcom";
+import { avatarOf, exportGedcom, importGedcom } from "@kakeizu/gedcom";
+import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SAMPLE_GEDCOM } from "./sample";
 import { STORAGE_KEY } from "./storage";
-import { initialState, useFamilyTreeStore } from "./store";
+import { initialState, SAVE_FAILED_MESSAGE, useFamilyTreeStore } from "./store";
 
 const gedcom = (...body: string[]) => ["0 HEAD", "1 GEDC", "2 VERS 7.0", ...body, "0 TRLR", ""].join("\n");
 
@@ -132,6 +133,16 @@ describe("追加・更新・削除", () => {
     expect(stored()?.individuals[1]).toMatchObject({ givenName: "花子", surname: "山田" });
   });
 
+  it("setAvatar / removeAvatar は写真を設定・削除し、保存する", () => {
+    const png = "data:image/png;base64,AA==";
+    expect(store().setAvatar("I1", png)).toEqual({ ok: true, value: undefined });
+    expect(avatarOf(stored()!, "I1")?.dataUri).toBe(png);
+    expect(store().removeAvatar("I1")).toEqual({ ok: true, value: undefined });
+    expect(avatarOf(stored()!, "I1")).toBeUndefined();
+    expect(store().setAvatar("I1", "not-image")).toEqual({ ok: false, error: "写真の形式が不正です" });
+    expect(store().removeAvatar("I9")).toEqual({ ok: false, error: "人物 I9 が存在しません" });
+  });
+
   it("操作エラーはメッセージを返す", () => {
     expect(store().addSpouse("I1", { givenName: "" })).toEqual({ ok: false, error: "姓または名を入力してください" });
     expect(store().update("I9", { givenName: "a" })).toEqual({ ok: false, error: "人物 I9 が存在しません" });
@@ -184,20 +195,32 @@ describe("データが空の状態", () => {
     expect(store().centerId).toBeUndefined();
   });
 
-  it("tree が null のままの更新・削除・縁組はエラーを返す", () => {
+  it("tree が null のままの更新・削除・縁組・写真の操作はエラーを返す", () => {
     expect(store().update("I1", { givenName: "a" })).toEqual({ ok: false, error: "人物 I1 が存在しません" });
     expect(store().adoptInto("I1", "F1", "adopted")).toEqual({ ok: false, error: "家族 F1 が存在しません" });
+    expect(store().setAvatar("I1", "data:image/png;base64,AA==")).toEqual({ ok: false, error: "人物 I1 が存在しません" });
+    expect(store().removeAvatar("I1")).toEqual({ ok: false, error: "人物 I1 が存在しません" });
     expect(store().remove("I1")).toEqual({ ok: false, error: "人物 I1 が存在しません" });
   });
 });
 
 describe("保存", () => {
-  it("localStorage への保存に失敗しても操作は継続できる", () => {
+  it("localStorage への保存に失敗しても操作は継続でき、失敗を通知する", () => {
+    const error = vi.spyOn(toast, "error").mockImplementation(() => "");
     const spy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
       throw new Error("QuotaExceededError");
     });
     expect(store().importText(COUPLE).ok).toBe(true);
     expect(store().tree?.individuals).toHaveLength(2);
+    expect(error).toHaveBeenCalledWith(SAVE_FAILED_MESSAGE, { id: "save-failed" });
     spy.mockRestore();
+    error.mockRestore();
+  });
+
+  it("保存に成功した場合は通知しない", () => {
+    const error = vi.spyOn(toast, "error").mockImplementation(() => "");
+    expect(store().importText(COUPLE).ok).toBe(true);
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
   });
 });

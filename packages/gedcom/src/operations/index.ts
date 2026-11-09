@@ -15,6 +15,7 @@ export {
   vacantAdoptiveFamilies,
   type AdoptionKind,
 } from "./adopt";
+export { removeAvatar, setAvatar } from "./avatar";
 export { TreeOperationError } from "./errors";
 export { parsePersonInput, personInputSchema, type PersonInput } from "./input";
 export { canDeleteIndividual, deleteIndividual, type DeleteCheck } from "./remove";

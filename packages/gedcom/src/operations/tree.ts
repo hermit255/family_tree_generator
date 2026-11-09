@@ -46,7 +46,7 @@ export const newIndividual = (id: string, input: ValidPersonInput, links: Partia
 });
 
 /** `{prefix}{n}` 形式の既存 xref の最大番号 + 1 */
-export const nextId = (tree: FamilyTree, prefix: "I" | "F"): string => {
+export const nextId = (tree: FamilyTree, prefix: "I" | "F" | "O"): string => {
   const pattern = new RegExp(`^${prefix}(\\d+)$`);
   const ids = [
     ...tree.submitters,

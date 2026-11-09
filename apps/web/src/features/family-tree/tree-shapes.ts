@@ -1,3 +1,4 @@
+import type { ImageConfig } from "konva/lib/shapes/Image";
 import type { LineConfig } from "konva/lib/shapes/Line";
 import type { RectConfig } from "konva/lib/shapes/Rect";
 import type { TextConfig } from "konva/lib/shapes/Text";
@@ -18,10 +19,23 @@ export const COLORS = {
 
 const MARRIAGE_WIDTH = 6;
 
-/** 個人ノードの枠と文字(座標はノード左上を原点とする)。highlightCenter が false なら中心人物も通常の見た目にする */
-export const personShapes = (node: LayoutNode, highlightCenter: boolean): { rect: RectConfig; text: TextConfig } => {
+/** 写真の大きさと、ノードの左上からの余白 */
+export const AVATAR_SIZE = 36;
+const AVATAR_INSET = (NODE_HEIGHT - AVATAR_SIZE) / 2;
+
+/** 写真の配置(image を除く設定)。円形に切り抜き、性別の色で縁取る */
+export type AvatarShape = Omit<ImageConfig, "image">;
+
+type PersonShapes = { rect: RectConfig; text: TextConfig; avatar?: AvatarShape };
+
+/**
+ * 個人ノードの枠・文字・写真(座標はノード左上を原点とする)。highlightCenter が false なら中心人物も通常の見た目にする。
+ * 写真のある人物は左端に写真を置き、文字を右へずらす
+ */
+export const personShapes = (node: LayoutNode, highlightCenter: boolean): PersonShapes => {
   const color = node.sex === "M" || node.sex === "F" ? COLORS.sex[node.sex] : COLORS.sex.other;
   const emphasized = highlightCenter && node.isCenter;
+  const textLeft = node.avatar ? AVATAR_INSET + AVATAR_SIZE : 0;
   return {
     rect: {
       width: NODE_WIDTH,
@@ -32,7 +46,8 @@ export const personShapes = (node: LayoutNode, highlightCenter: boolean): { rect
       strokeWidth: emphasized ? 4 : 2,
     },
     text: {
-      width: NODE_WIDTH,
+      x: textLeft,
+      width: NODE_WIDTH - textLeft,
       height: NODE_HEIGHT,
       padding: 8,
       text: node.label,
@@ -44,7 +59,26 @@ export const personShapes = (node: LayoutNode, highlightCenter: boolean): { rect
       wrap: "none",
       ellipsis: true,
     },
+    ...(node.avatar
+      ? {
+          avatar: {
+            x: AVATAR_INSET,
+            y: AVATAR_INSET,
+            width: AVATAR_SIZE,
+            height: AVATAR_SIZE,
+            cornerRadius: AVATAR_SIZE / 2,
+            stroke: color.stroke,
+            strokeWidth: 1,
+          },
+        }
+      : {}),
   };
+};
+
+/** 画像の中央を正方形に切り抜く範囲(写真が正方形でない場合に縦横比を保つ) */
+export const squareCrop = (width: number, height: number): { x: number; y: number; width: number; height: number } => {
+  const size = Math.min(width, height);
+  return { x: (width - size) / 2, y: (height - size) / 2, width: size, height: size };
 };
 
 /** 養親子(普通養子)の線の破線パターン */

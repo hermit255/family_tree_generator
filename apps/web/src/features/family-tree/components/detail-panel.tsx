@@ -27,6 +27,7 @@ import { Separator } from "@/components/ui/separator";
 import { displayName } from "../layout";
 import { parentNamesOf } from "../relations";
 import { useFamilyTreeStore } from "../store";
+import { AvatarSection } from "./avatar-section";
 import { PersonForm, SEX_LABELS } from "./person-form";
 
 function DeleteSection({ person }: { person: Individual }) {
@@ -94,6 +95,7 @@ function PersonView({ person, onEdit }: { person: Individual; onEdit: () => void
   ];
   return (
     <div className="flex flex-col gap-4">
+      <AvatarSection person={person} />
       <dl className="grid grid-cols-[4rem_1fr] gap-y-2 text-sm">
         {rows.map(([label, value], index) => (
           // 実親・養親は複数行になり得るため、行の位置を key にする

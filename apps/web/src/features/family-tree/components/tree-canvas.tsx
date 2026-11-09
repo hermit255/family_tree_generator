@@ -3,9 +3,11 @@
 import Konva from "konva";
 import type { KonvaEventObject } from "konva/lib/Node";
 import { useEffect, useLayoutEffect, useRef } from "react";
-import { Group, Layer, Line, Rect, Stage, Text } from "react-konva";
+// Image は HTML の img と紛らわしく jsx-a11y の alt 検査の対象になるため別名にする
+import { Group, Image as KonvaImage, Layer, Line, Rect, Stage, Text } from "react-konva";
+import { useLoadedImage } from "../avatar-image";
 import { NODE_HEIGHT, NODE_WIDTH, type LayoutNode, type TreeLayout } from "../layout";
-import { COLORS, descentShape, marriageShapes, personShapes } from "../tree-shapes";
+import { COLORS, descentShape, marriageShapes, personShapes, squareCrop, type AvatarShape } from "../tree-shapes";
 
 // ピンチ操作中もタッチイベントを受け取る
 Konva.hitOnDragEnabled = true;
@@ -45,6 +47,13 @@ const zoomAt = (stage: Konva.Stage, point: Point, nextScale: number) => {
   stage.position({ x: point.x - origin.x * scale, y: point.y - origin.y * scale });
 };
 
+/** ノード上の写真。読み込みが終わるまでは描かない */
+const AvatarImage = ({ src, shape }: { src: string; shape: AvatarShape }) => {
+  const image = useLoadedImage(src);
+  if (!image) return null;
+  return <KonvaImage {...shape} image={image} crop={squareCrop(image.naturalWidth, image.naturalHeight)} />;
+};
+
 const PersonNode = ({ node, onSelect }: { node: LayoutNode; onSelect: (id: string) => void }) => {
   const shapes = personShapes(node, true);
   const select = () => onSelect(node.id);
@@ -62,6 +71,7 @@ const PersonNode = ({ node, onSelect }: { node: LayoutNode; onSelect: (id: strin
       onMouseLeave={(e) => setCursor(e, "")}
     >
       <Rect {...shapes.rect} />
+      {node.avatar && shapes.avatar && <AvatarImage src={node.avatar} shape={shapes.avatar} />}
       <Text {...shapes.text} />
     </Group>
   );

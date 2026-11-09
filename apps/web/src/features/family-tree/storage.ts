@@ -13,10 +13,12 @@ export const loadStoredTree = (): FamilyTree | null => {
   }
 };
 
-export const saveTree = (tree: FamilyTree): void => {
+/** 保存し、成否を返す。容量超過・ストレージ無効時は保存しない(画面上の操作は継続できる) */
+export const saveTree = (tree: FamilyTree): boolean => {
   try {
     localStorage.setItem(STORAGE_KEY, exportGedcom(tree));
+    return true;
   } catch {
-    // 容量超過・ストレージ無効時は保存しない(画面上の操作は継続できる)
+    return false;
   }
 };

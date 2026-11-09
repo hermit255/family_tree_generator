@@ -63,8 +63,11 @@ export async function exportAs(page: Page, label: string): Promise<{ name: strin
 
 const readDownload = async (download: Download) => readFile((await download.path())!);
 
-/** ヘッダーのインポートからファイルを選ぶ(この後に置き換えの確認ダイアログが開く) */
-export async function chooseImportFile(page: Page, file: string) {
+/** ダウンロードしたファイルなど、ディスク上に無いファイルの中身 */
+export type FilePayload = { name: string; mimeType: string; buffer: Buffer };
+
+/** ヘッダーのインポートからファイル(fixtures のファイル名、またはファイルの中身)を選ぶ(この後に置き換えの確認ダイアログが開く) */
+export async function chooseImportFile(page: Page, file: string | FilePayload) {
   const chooser = page.waitForEvent("filechooser");
   if (isMobile(page)) {
     await openHeaderMenu(page, "インポート");
@@ -72,7 +75,7 @@ export async function chooseImportFile(page: Page, file: string) {
   } else {
     await page.getByRole("button", { name: "インポート" }).click();
   }
-  await (await chooser).setFiles(fixture(file));
+  await (await chooser).setFiles(typeof file === "string" ? fixture(file) : file);
 }
 
 /** ヘッダーの新規作成を押す(この後に確認ダイアログが開く) */

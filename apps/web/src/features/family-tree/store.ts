@@ -10,6 +10,8 @@ import {
   GedcomImportError,
   GedcomSyntaxError,
   importGedcom,
+  removeAvatar,
+  setAvatar,
   TreeOperationError,
   updateIndividual,
   type AddResult,
@@ -18,6 +20,7 @@ import {
   type ParentRole,
   type PersonInput,
 } from "@kakeizu/gedcom";
+import { toast } from "sonner";
 import { create } from "zustand";
 import { BLANK_GEDCOM, SAMPLE_GEDCOM } from "./sample";
 import { loadStoredTree, saveTree } from "./storage";
@@ -61,6 +64,9 @@ type FamilyTreeActions = {
   /** 既存の家族の養子にする */
   adoptInto: (childId: string, familyId: string, kind: AdoptionKind) => ActionResult;
   update: (id: string, input: PersonInput) => ActionResult;
+  /** 写真(data URI)を設定・差し替える */
+  setAvatar: (id: string, dataUri: string) => ActionResult;
+  removeAvatar: (id: string) => ActionResult;
   remove: (id: string) => ActionResult;
 };
 
@@ -142,6 +148,16 @@ export const useFamilyTreeStore = create<FamilyTreeState & FamilyTreeActions>()(
         set({ tree: updateIndividual(get().tree ?? EMPTY_TREE, id, input) });
       }),
 
+    setAvatar: (id, dataUri) =>
+      attempt(() => {
+        set({ tree: setAvatar(get().tree ?? EMPTY_TREE, id, dataUri) });
+      }),
+
+    removeAvatar: (id) =>
+      attempt(() => {
+        set({ tree: removeAvatar(get().tree ?? EMPTY_TREE, id) });
+      }),
+
     remove: (id) =>
       attempt(() => {
         const tree = deleteIndividual(get().tree ?? EMPTY_TREE, id);
@@ -156,7 +172,12 @@ export const useFamilyTreeStore = create<FamilyTreeState & FamilyTreeActions>()(
   };
 });
 
-// tree が変わるたびに localStorage へ保存する
+export const SAVE_FAILED_MESSAGE =
+  "ブラウザに保存できませんでした(容量不足の可能性があります)。写真を減らすか、GEDCOM にエクスポートしてください";
+
+// tree が変わるたびに localStorage へ保存する。失敗した場合は通知する(続けて失敗しても通知は1件にまとめる)
 useFamilyTreeStore.subscribe((state, prev) => {
-  if (state.tree && state.tree !== prev.tree) saveTree(state.tree);
+  if (state.tree && state.tree !== prev.tree && !saveTree(state.tree)) {
+    toast.error(SAVE_FAILED_MESSAGE, { id: "save-failed" });
+  }
 });

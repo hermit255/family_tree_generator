@@ -1,4 +1,5 @@
 import { findRootId, linkPedigree, type Family, type FamilyTree } from "../model";
+import { pruneAvatarObjects } from "./avatar";
 import { TreeOperationError } from "./errors";
 import { getIndividual } from "./tree";
 
@@ -78,5 +79,7 @@ export const canDeleteIndividual = (tree: FamilyTree, id: string): DeleteCheck =
 export const deleteIndividual = (tree: FamilyTree, id: string): FamilyTree => {
   const check = canDeleteIndividual(tree, id);
   if (!check.ok) throw new TreeOperationError(check.reason);
-  return removeIndividual(tree, id);
+  // 削除した人物だけが参照していた写真の OBJE レコードも削除する
+  const objects = getIndividual(tree, id).extras.flatMap((n) => (n.tag === "OBJE" && n.pointer ? [n.pointer] : []));
+  return pruneAvatarObjects(removeIndividual(tree, id), objects);
 };

@@ -686,3 +686,15 @@ it("配偶者が1人なら子への線は婚姻線の中点から真下に下り
   expect(layout.descents[0]!.points[0]).toBe(middle);
   expect(k.x + NODE_WIDTH / 2).toBe(middle);
 });
+
+describe("写真", () => {
+  it("写真のある人物のノードに data URI を添える", () => {
+    const png = "data:image/png;base64,AA==";
+    const layout = computeLayout(
+      treeOf("0 @I1@ INDI", "1 OBJE @O1@", "0 @I2@ INDI", "0 @O1@ OBJE", `1 FILE ${png}`),
+      undefined,
+    );
+    expect(nodeOf(layout, "I1").avatar).toBe(png);
+    expect(nodeOf(layout, "I2").avatar).toBeUndefined();
+  });
+});

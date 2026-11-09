@@ -8,6 +8,7 @@ import {
   layoutBounds,
   marriageShapes,
   personShapes,
+  squareCrop,
 } from "./tree-shapes";
 
 const node = (overrides: Partial<LayoutNode> = {}): LayoutNode => ({
@@ -42,6 +43,25 @@ describe("personShapes", () => {
     const { rect, text } = personShapes(node({ sex: "M", isCenter: true }), false);
     expect(rect).toMatchObject({ stroke: COLORS.sex.M.stroke, strokeWidth: 2 });
     expect(text.fontStyle).toBe("normal");
+  });
+});
+
+describe("写真", () => {
+  it("写真のある人物は左端に円形の写真を置き、文字を右へずらす", () => {
+    const { text, avatar } = personShapes(node({ sex: "F", avatar: "data:image/png;base64,AA==" }), true);
+    expect(avatar).toMatchObject({ x: 6, y: 6, width: 36, height: 36, cornerRadius: 18, stroke: COLORS.sex.F.stroke });
+    expect(text).toMatchObject({ x: 42, width: NODE_WIDTH - 42 });
+  });
+
+  it("写真の無い人物は写真を置かず、文字はノードの幅いっぱい", () => {
+    const { text, avatar } = personShapes(node(), true);
+    expect(avatar).toBeUndefined();
+    expect(text).toMatchObject({ x: 0, width: NODE_WIDTH });
+  });
+
+  it("squareCrop は中央の正方形を切り抜く", () => {
+    expect(squareCrop(300, 200)).toEqual({ x: 50, y: 0, width: 200, height: 200 });
+    expect(squareCrop(100, 160)).toEqual({ x: 0, y: 30, width: 100, height: 100 });
   });
 });
 

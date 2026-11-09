@@ -8,7 +8,7 @@ export const createExportBlob = async (format: ExportFormat, target: ExportTarge
   if (format === "ged") return gedBlob(target);
   if (!canExport(format, target)) throw new Error("画像に出力する人物がいません");
   const { renderTreeImage, imageToPngBlob } = await import("./image");
-  const image = renderTreeImage(target);
+  const image = await renderTreeImage(target);
   if (format === "png") return imageToPngBlob(image);
   const { imageToPdfBlob } = await import("./pdf");
   return imageToPdfBlob(image);
